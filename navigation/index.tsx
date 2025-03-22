@@ -16,6 +16,7 @@ import MedicationScreen from "../screens/medication-screen"
 import ProgressScreen from "../screens/progress-screen"
 import SettingsScreen from "../screens/settings-screen"
 import NutritionScreen from "../screens/nutrition-screen"
+import StepsCounter from "../screens/step-counter"
 
 // Define the types for our navigation
 export type RootStackParamList = {
