@@ -261,27 +261,15 @@ export default function BloodSugarScreen() {
                 }
         };
 
-        const getAverageBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0;
-                const sum = bloodSugarData.reduce((acc, reading) => acc + reading.value, 0);
-                return Math.round(sum / bloodSugarData.length);
-        };
-
-        const getHighestBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0;
-                return Math.max(...bloodSugarData.map((reading) => reading.value));
-        };
-
-        const getLowestBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0;
-                return Math.min(...bloodSugarData.map((reading) => reading.value));
-        };
-
         const getFilteredData = () => {
                 const now = new Date();
-                let filteredData = [...bloodSugarData];
+                let filteredData = [...bloodSugarData].map(reading => ({
+                        ...reading,
+                        id: reading.id || Object.keys(bloodSugarData).find(key => bloodSugarData[key] === reading)
+                }));
 
                 if (timeFrame === "daily") {
+                        // Filter for the current day only
                         filteredData = filteredData.filter((reading) => {
                                 const readingDate = new Date(reading.timestamp);
                                 return (
@@ -291,6 +279,7 @@ export default function BloodSugarScreen() {
                                 );
                         });
                 } else if (timeFrame === "weekly") {
+                        // Filter for the last 7 days
                         const oneWeekAgo = new Date(now);
                         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
                         filteredData = filteredData.filter((reading) => {
@@ -298,31 +287,44 @@ export default function BloodSugarScreen() {
                                 return readingDate >= oneWeekAgo;
                         });
                 } else if (timeFrame === "monthly") {
+                        // Filter for the last 30 days
                         const oneMonthAgo = new Date(now);
-                        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
                         filteredData = filteredData.filter((reading) => {
                                 const readingDate = new Date(reading.timestamp);
                                 return readingDate >= oneMonthAgo;
                         });
                 }
 
-                return filteredData;
+                // Sort the filtered data by timestamp
+                return filteredData.sort((a, b) => a.timestamp - b.timestamp);
         };
 
         const getChartData = () => {
                 const filteredData = getFilteredData();
 
+                // If no data is available after filtering, return empty chart data
+                if (filteredData.length === 0) {
+                        return {
+                                labels: [],
+                                datasets: [{ data: [], color: () => colors.bloodSugar, strokeWidth: 2 }]
+                        };
+                }
+
+                // Create appropriate time labels based on the timeFrame
+                let labels = filteredData.map((reading) => {
+                        const date = new Date(reading.timestamp);
+                        if (timeFrame === "daily") {
+                                return format(date, "HH:mm");
+                        } else if (timeFrame === "weekly") {
+                                return format(date, "EEE dd"); // Show day of week and date
+                        } else {
+                                return format(date, "MM/dd"); // Show month/day for monthly view
+                        }
+                });
+
                 return {
-                        labels: filteredData.map((reading) => {
-                                const date = new Date(reading.timestamp);
-                                if (timeFrame === "daily") {
-                                        return format(date, "HH:mm");
-                                } else if (timeFrame === "weekly") {
-                                        return format(date, "EEE");
-                                } else {
-                                        return format(date, "MM/dd");
-                                }
-                        }),
+                        labels,
                         datasets: [
                                 {
                                         data: filteredData.map((reading) => reading.value),
@@ -331,6 +333,26 @@ export default function BloodSugarScreen() {
                                 },
                         ],
                 };
+        };
+
+        // Make sure we have appropriate statistics for each time frame
+        const getAverageBloodSugar = () => {
+                const filteredData = getFilteredData();
+                if (filteredData.length === 0) return 0;
+                const sum = filteredData.reduce((acc, reading) => acc + reading.value, 0);
+                return Math.round(sum / filteredData.length);
+        };
+
+        const getHighestBloodSugar = () => {
+                const filteredData = getFilteredData();
+                if (filteredData.length === 0) return 0;
+                return Math.max(...filteredData.map((reading) => reading.value));
+        };
+
+        const getLowestBloodSugar = () => {
+                const filteredData = getFilteredData();
+                if (filteredData.length === 0) return 0;
+                return Math.min(...filteredData.map((reading) => reading.value));
         };
 
         return (

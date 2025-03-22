@@ -50,7 +50,7 @@ function MoreNavigator() {
                 <MoreStack.Navigator>
                         <MoreStack.Screen name="MoreMenu" component={MoreMenuScreen} options={{ title: "More Options" }} />
                         <MoreStack.Screen name="HealthRisk" component={HealthRiskScreen} options={{ title: "Health Risk Assessment" }} />
-                        <MoreStack.Screen name="StepCounter" component={StepCounterScreen} options={{ title: "Step Counter" }} />
+                        <MoreStack.Screen name="StepCounter" component={StepsCounter} options={{ title: "Step Counter" }} />
                         <MoreStack.Screen name="Medication" component={MedicationScreen} options={{ title: "Medications & Reminders" }} />
                         <MoreStack.Screen name="Progress" component={ProgressScreen} options={{ title: "Progress Monitoring" }} />
                         <MoreStack.Screen name="Nutrition" component={NutritionScreen} options={{ title: "AI Nutrition Advisor" }} />
