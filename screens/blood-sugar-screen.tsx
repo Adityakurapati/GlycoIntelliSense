@@ -1,54 +1,172 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
-import { ScrollView, View, StyleSheet, TouchableOpacity, Alert, Image, Modal } from "react-native"
+import { ScrollView, View, StyleSheet, TouchableOpacity, Alert, Image, Modal, Platform } from "react-native"
 import { Text, Card, Button, Input, Icon, Divider } from "@rneui/themed"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { LineChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { format } from "date-fns"
+import { format, parse, isValid } from "date-fns"
 import * as ImagePicker from "expo-image-picker"
+import { useAuth } from "../context/AuthContext" // Assuming you have an auth context
+import {
+        getBloodSugarReadings,
+        addBloodSugarReading,
+        updateBloodSugarReading,
+        deleteBloodSugarReading,
+        getPrescriptionImage
+} from "../config/dbService"
 
 import type { BloodSugarReading } from "../types"
 import { colors } from "../constants/theme"
 
-// Mock data - in a real app, this would come from a database or API
-const mockBloodSugarReadings: BloodSugarReading[] = [
-        { id: "1", value: 120, timestamp: new Date(2023, 3, 1), mealStatus: "fasting" },
-        { id: "2", value: 145, timestamp: new Date(2023, 3, 2), mealStatus: "after" },
-        { id: "3", value: 110, timestamp: new Date(2023, 3, 3), mealStatus: "before" },
-        { id: "4", value: 130, timestamp: new Date(2023, 3, 4), mealStatus: "after" },
-        { id: "5", value: 105, timestamp: new Date(2023, 3, 5), mealStatus: "fasting" },
-        { id: "6", value: 125, timestamp: new Date(2023, 3, 6), mealStatus: "before" },
-        { id: "7", value: 140, timestamp: new Date(2023, 3, 7), mealStatus: "after" },
-]
-
 export default function BloodSugarScreen() {
+        // Auth state
+        const { user } = useAuth();
+
+        // App state
         const [bloodSugarData, setBloodSugarData] = useState<BloodSugarReading[]>([])
         const [newReading, setNewReading] = useState("")
         const [mealStatus, setMealStatus] = useState<"before" | "after" | "fasting">("fasting")
         const [notes, setNotes] = useState("")
         const [timeFrame, setTimeFrame] = useState<"daily" | "weekly" | "monthly">("daily")
         const [loading, setLoading] = useState(true)
+        const [isRefreshing, setIsRefreshing] = useState(false)
 
-        // New state variables for image functionality
+        // Date and time input state
+        const [dateInput, setDateInput] = useState("")
+        const [timeInput, setTimeInput] = useState("")
+        const [dateError, setDateError] = useState("")
+        const [timeError, setTimeError] = useState("")
+        const [useCurrentDateTime, setUseCurrentDateTime] = useState(true)
+
+        // Image functionality state
         const [prescriptionImage, setPrescriptionImage] = useState<string | null>(null)
         const [modalVisible, setModalVisible] = useState(false)
         const [selectedReading, setSelectedReading] = useState<BloodSugarReading | null>(null)
 
+        // Initialize date and time inputs with current date/time
         useEffect(() => {
-                // In a real app, fetch data from API or local storage
-                setBloodSugarData(mockBloodSugarReadings)
-                setLoading(false)
-        }, [])
+                const now = new Date();
+                setDateInput(format(now, "MM/dd/yyyy"));
+                setTimeInput(format(now, "hh:mm a"));
+        }, []);
+
+        // Load data on component mount and when user changes
+        useEffect(() => {
+                if (user) {
+                        fetchBloodSugarReadings();
+                }
+        }, [user]);
+
+        // Fetch blood sugar readings from Firebase
+        const fetchBloodSugarReadings = async () => {
+                try {
+                        setLoading(true);
+                        const readings = await getBloodSugarReadings(user.uid);
+                        setBloodSugarData(readings);
+                } catch (error) {
+                        console.error("Error fetching readings:", error);
+                        Alert.alert("Error", "Failed to load blood sugar readings");
+                } finally {
+                        setLoading(false);
+                        setIsRefreshing(false);
+                }
+        };
+
+        // Refresh data
+        const handleRefresh = () => {
+                setIsRefreshing(true);
+                fetchBloodSugarReadings();
+        };
+
+        // Date and time validation handlers
+        const validateDate = (date: string): boolean => {
+                // Check format MM/DD/YYYY
+                const parsedDate = parse(date, "MM/dd/yyyy", new Date());
+                if (!isValid(parsedDate)) {
+                        setDateError("Please enter a valid date (MM/DD/YYYY)");
+                        return false;
+                }
+
+                // Check if date is in the future
+                if (parsedDate > new Date()) {
+                        setDateError("Date cannot be in the future");
+                        return false;
+                }
+
+                setDateError("");
+                return true;
+        }
+
+        const validateTime = (time: string): boolean => {
+                // Check format hh:mm AM/PM
+                const parsedTime = parse(time, "hh:mm a", new Date());
+                if (!isValid(parsedTime)) {
+                        setTimeError("Please enter a valid time (hh:mm AM/PM)");
+                        return false;
+                }
+
+                setTimeError("");
+                return true;
+        }
+
+        const handleDateChange = (text: string) => {
+                setDateInput(text);
+                if (!useCurrentDateTime) {
+                        validateDate(text);
+                }
+        }
+
+        const handleTimeChange = (text: string) => {
+                setTimeInput(text);
+                if (!useCurrentDateTime) {
+                        validateTime(text);
+                }
+        }
+
+        const toggleUseCurrentDateTime = () => {
+                setUseCurrentDateTime(!useCurrentDateTime);
+                if (!useCurrentDateTime) {
+                        // If switching to current date/time, update the values and clear errors
+                        const now = new Date();
+                        setDateInput(format(now, "MM/dd/yyyy"));
+                        setTimeInput(format(now, "hh:mm a"));
+                        setDateError("");
+                        setTimeError("");
+                }
+        };
+
+        // Get combined timestamp from input date and time
+        const getCombinedTimestamp = (): number => {
+                if (useCurrentDateTime) {
+                        return Date.now();
+                }
+
+                // Combine date and time inputs
+                const dateStr = dateInput;
+                const timeStr = timeInput;
+
+                // Parse the combined date/time
+                const combinedDateTimeStr = `${dateStr} ${timeStr}`;
+                const parsedDateTime = parse(combinedDateTimeStr, "MM/dd/yyyy hh:mm a", new Date());
+
+                if (!isValid(parsedDateTime)) {
+                        // If invalid, fall back to current time
+                        return Date.now();
+                }
+
+                return parsedDateTime.getTime();
+        };
 
         const pickImage = async () => {
                 // Request permissions for accessing the image library
-                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync()
+                const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
                 if (status !== 'granted') {
-                        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to upload prescription images!')
-                        return
+                        Alert.alert('Permission Denied', 'Sorry, we need camera roll permissions to upload prescription images!');
+                        return;
                 }
 
                 // Launch the image library
@@ -57,102 +175,152 @@ export default function BloodSugarScreen() {
                         allowsEditing: true,
                         aspect: [4, 3],
                         quality: 1,
-                })
+                });
 
                 if (!result.canceled && result.assets && result.assets.length > 0) {
-                        setPrescriptionImage(result.assets[0].uri)
+                        setPrescriptionImage(result.assets[0].uri);
                 }
-        }
+        };
 
-        const addBloodSugarReading = () => {
+        const addReading = async () => {
                 if (!newReading || isNaN(Number(newReading))) {
-                        Alert.alert("Invalid Input", "Please enter a valid blood sugar reading")
-                        return
+                        Alert.alert("Invalid Input", "Please enter a valid blood sugar reading");
+                        return;
                 }
 
-                const newReadingObj: BloodSugarReading = {
-                        id: Date.now().toString(),
-                        value: Number(newReading),
-                        timestamp: new Date(),
-                        mealStatus: mealStatus,
-                        notes: notes,
-                        prescriptionImageUri: prescriptionImage, // Add the image URI to the reading
+                // Validate date and time if not using current
+                if (!useCurrentDateTime) {
+                        const isDateValid = validateDate(dateInput);
+                        const isTimeValid = validateTime(timeInput);
+
+                        if (!isDateValid || !isTimeValid) {
+                                return;
+                        }
                 }
 
-                setBloodSugarData([...bloodSugarData, newReadingObj])
-                setNewReading("")
-                setNotes("")
-                setMealStatus("fasting")
-                setPrescriptionImage(null) // Reset the image after adding
+                try {
+                        setLoading(true);
 
-                Alert.alert("Success", "Blood sugar reading added successfully")
-        }
+                        const readingData = {
+                                value: Number(newReading),
+                                mealStatus: mealStatus,
+                                notes: notes,
+                                timestamp: getCombinedTimestamp()
+                        };
 
-        const openReadingModal = (reading: BloodSugarReading) => {
-                setSelectedReading(reading)
-                setModalVisible(true)
-        }
+                        await addBloodSugarReading(user.uid, readingData, prescriptionImage);
+
+                        // Reset form
+                        setNewReading("");
+                        setNotes("");
+                        setMealStatus("fasting");
+                        setPrescriptionImage(null);
+
+                        // Refresh data
+                        await fetchBloodSugarReadings();
+
+                        Alert.alert("Success", "Blood sugar reading added successfully");
+                } catch (error) {
+                        console.error("Error adding reading:", error);
+                        Alert.alert("Error", "Failed to add blood sugar reading");
+                } finally {
+                        setLoading(false);
+                }
+        };
+
+        const deleteReading = async (readingId, prescriptionImageUrl) => {
+                try {
+                        setLoading(true);
+                        await deleteBloodSugarReading(readingId, prescriptionImageUrl);
+
+                        // Close modal if open
+                        if (modalVisible) {
+                                setModalVisible(false);
+                        }
+
+                        // Refresh data
+                        await fetchBloodSugarReadings();
+
+                        Alert.alert("Success", "Reading deleted successfully");
+                } catch (error) {
+                        console.error("Error deleting reading:", error);
+                        Alert.alert("Error", "Failed to delete reading");
+                } finally {
+                        setLoading(false);
+                }
+        };
+
+        const openReadingModal = async (reading) => {
+                // If the reading has an image URL, load it
+                try {
+                        setSelectedReading(reading);
+                        setModalVisible(true);
+                } catch (error) {
+                        console.error("Error opening reading:", error);
+                        Alert.alert("Error", "Failed to display reading details");
+                }
+        };
 
         const getAverageBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0
-                const sum = bloodSugarData.reduce((acc, reading) => acc + reading.value, 0)
-                return Math.round(sum / bloodSugarData.length)
-        }
+                if (bloodSugarData.length === 0) return 0;
+                const sum = bloodSugarData.reduce((acc, reading) => acc + reading.value, 0);
+                return Math.round(sum / bloodSugarData.length);
+        };
 
         const getHighestBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0
-                return Math.max(...bloodSugarData.map((reading) => reading.value))
-        }
+                if (bloodSugarData.length === 0) return 0;
+                return Math.max(...bloodSugarData.map((reading) => reading.value));
+        };
 
         const getLowestBloodSugar = () => {
-                if (bloodSugarData.length === 0) return 0
-                return Math.min(...bloodSugarData.map((reading) => reading.value))
-        }
+                if (bloodSugarData.length === 0) return 0;
+                return Math.min(...bloodSugarData.map((reading) => reading.value));
+        };
 
         const getFilteredData = () => {
-                const now = new Date()
-                let filteredData = [...bloodSugarData]
+                const now = new Date();
+                let filteredData = [...bloodSugarData];
 
                 if (timeFrame === "daily") {
                         filteredData = filteredData.filter((reading) => {
-                                const readingDate = new Date(reading.timestamp)
+                                const readingDate = new Date(reading.timestamp);
                                 return (
                                         readingDate.getDate() === now.getDate() &&
                                         readingDate.getMonth() === now.getMonth() &&
                                         readingDate.getFullYear() === now.getFullYear()
-                                )
-                        })
+                                );
+                        });
                 } else if (timeFrame === "weekly") {
-                        const oneWeekAgo = new Date(now)
-                        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7)
+                        const oneWeekAgo = new Date(now);
+                        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
                         filteredData = filteredData.filter((reading) => {
-                                const readingDate = new Date(reading.timestamp)
-                                return readingDate >= oneWeekAgo
-                        })
+                                const readingDate = new Date(reading.timestamp);
+                                return readingDate >= oneWeekAgo;
+                        });
                 } else if (timeFrame === "monthly") {
-                        const oneMonthAgo = new Date(now)
-                        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1)
+                        const oneMonthAgo = new Date(now);
+                        oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
                         filteredData = filteredData.filter((reading) => {
-                                const readingDate = new Date(reading.timestamp)
-                                return readingDate >= oneMonthAgo
-                        })
+                                const readingDate = new Date(reading.timestamp);
+                                return readingDate >= oneMonthAgo;
+                        });
                 }
 
-                return filteredData
-        }
+                return filteredData;
+        };
 
         const getChartData = () => {
-                const filteredData = getFilteredData()
+                const filteredData = getFilteredData();
 
                 return {
                         labels: filteredData.map((reading) => {
-                                const date = new Date(reading.timestamp)
+                                const date = new Date(reading.timestamp);
                                 if (timeFrame === "daily") {
-                                        return format(date, "HH:mm")
+                                        return format(date, "HH:mm");
                                 } else if (timeFrame === "weekly") {
-                                        return format(date, "EEE")
+                                        return format(date, "EEE");
                                 } else {
-                                        return format(date, "MM/dd")
+                                        return format(date, "MM/dd");
                                 }
                         }),
                         datasets: [
@@ -162,12 +330,15 @@ export default function BloodSugarScreen() {
                                         strokeWidth: 2,
                                 },
                         ],
-                }
-        }
+                };
+        };
 
         return (
                 <SafeAreaView style={styles.container}>
-                        <ScrollView>
+                        <ScrollView
+                                refreshing={isRefreshing}
+                                onRefresh={handleRefresh}
+                        >
                                 <Card containerStyle={styles.card}>
                                         <Card.Title>Add Blood Sugar Reading</Card.Title>
                                         <Card.Divider />
@@ -179,6 +350,7 @@ export default function BloodSugarScreen() {
                                                 value={newReading}
                                                 onChangeText={setNewReading}
                                                 leftIcon={<Icon name="droplet" type="feather" size={24} color={colors.bloodSugar} />}
+                                                disabled={loading}
                                         />
 
                                         <Text style={styles.label}>Meal Status</Text>
@@ -186,6 +358,7 @@ export default function BloodSugarScreen() {
                                                 <TouchableOpacity
                                                         style={[styles.mealStatusButton, mealStatus === "before" && styles.mealStatusButtonActive]}
                                                         onPress={() => setMealStatus("before")}
+                                                        disabled={loading}
                                                 >
                                                         <Text style={mealStatus === "before" ? styles.mealStatusTextActive : styles.mealStatusText}>
                                                                 Before Meal
@@ -195,6 +368,7 @@ export default function BloodSugarScreen() {
                                                 <TouchableOpacity
                                                         style={[styles.mealStatusButton, mealStatus === "after" && styles.mealStatusButtonActive]}
                                                         onPress={() => setMealStatus("after")}
+                                                        disabled={loading}
                                                 >
                                                         <Text style={mealStatus === "after" ? styles.mealStatusTextActive : styles.mealStatusText}>
                                                                 After Meal
@@ -204,11 +378,57 @@ export default function BloodSugarScreen() {
                                                 <TouchableOpacity
                                                         style={[styles.mealStatusButton, mealStatus === "fasting" && styles.mealStatusButtonActive]}
                                                         onPress={() => setMealStatus("fasting")}
+                                                        disabled={loading}
                                                 >
                                                         <Text style={mealStatus === "fasting" ? styles.mealStatusTextActive : styles.mealStatusText}>
                                                                 Fasting
                                                         </Text>
                                                 </TouchableOpacity>
+                                        </View>
+
+                                        {/* Date and Time Input Section */}
+                                        <Text style={styles.label}>Date and Time</Text>
+
+                                        <TouchableOpacity
+                                                style={styles.currentTimeToggle}
+                                                onPress={toggleUseCurrentDateTime}
+                                                disabled={loading}
+                                        >
+                                                <Icon
+                                                        name={useCurrentDateTime ? "check-square" : "square"}
+                                                        type="feather"
+                                                        size={20}
+                                                        color={colors.bloodSugar}
+                                                />
+                                                <Text style={styles.currentTimeToggleText}>
+                                                        Use current date and time
+                                                </Text>
+                                        </TouchableOpacity>
+
+                                        <View style={styles.dateTimeContainer}>
+                                                <Input
+                                                        label="Date"
+                                                        placeholder="MM/DD/YYYY"
+                                                        value={dateInput}
+                                                        onChangeText={handleDateChange}
+                                                        leftIcon={<Icon name="calendar" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
+                                                        disabled={useCurrentDateTime || loading}
+                                                        errorMessage={dateError}
+                                                        containerStyle={styles.dateTimeInput}
+                                                        style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
+                                                />
+
+                                                <Input
+                                                        label="Time"
+                                                        placeholder="hh:mm AM/PM"
+                                                        value={timeInput}
+                                                        onChangeText={handleTimeChange}
+                                                        leftIcon={<Icon name="clock" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
+                                                        disabled={useCurrentDateTime || loading}
+                                                        errorMessage={timeError}
+                                                        containerStyle={styles.dateTimeInput}
+                                                        style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
+                                                />
                                         </View>
 
                                         <Input
@@ -218,6 +438,7 @@ export default function BloodSugarScreen() {
                                                 value={notes}
                                                 onChangeText={setNotes}
                                                 leftIcon={<Icon name="file-text" type="feather" size={24} color="#888" />}
+                                                disabled={loading}
                                         />
 
                                         {/* Prescription Image Upload Section */}
@@ -229,12 +450,17 @@ export default function BloodSugarScreen() {
                                                                 <TouchableOpacity
                                                                         style={styles.removeImageButton}
                                                                         onPress={() => setPrescriptionImage(null)}
+                                                                        disabled={loading}
                                                                 >
                                                                         <Icon name="x-circle" type="feather" size={24} color="#ff4444" />
                                                                 </TouchableOpacity>
                                                         </View>
                                                 ) : (
-                                                        <TouchableOpacity style={styles.uploadButton} onPress={pickImage}>
+                                                        <TouchableOpacity
+                                                                style={styles.uploadButton}
+                                                                onPress={pickImage}
+                                                                disabled={loading}
+                                                        >
                                                                 <Icon name="camera" type="feather" size={24} color="#888" />
                                                                 <Text style={styles.uploadText}>Upload Prescription</Text>
                                                         </TouchableOpacity>
@@ -242,12 +468,15 @@ export default function BloodSugarScreen() {
                                         </View>
 
                                         <Button
-                                                title="Add Reading"
-                                                icon={<Icon name="plus" type="feather" color="#ffffff" style={{ marginRight: 10 }} />}
-                                                onPress={addBloodSugarReading}
+                                                title={loading ? "Adding..." : "Add Reading"}
+                                                icon={loading ? null : <Icon name="plus" type="feather" color="#ffffff" style={{ marginRight: 10 }} />}
+                                                onPress={addReading}
+                                                loading={loading}
+                                                disabled={loading}
                                         />
                                 </Card>
 
+                                {/* Rest of the component remains unchanged */}
                                 <Card containerStyle={styles.card}>
                                         <Card.Title>Blood Sugar Trends</Card.Title>
                                         <Card.Divider />
@@ -323,9 +552,10 @@ export default function BloodSugarScreen() {
                                         <Card.Title>Recent Readings</Card.Title>
                                         <Card.Divider />
 
-                                        {bloodSugarData.length > 0 ? (
+                                        {loading && bloodSugarData.length === 0 ? (
+                                                <Text style={styles.loadingText}>Loading readings...</Text>
+                                        ) : bloodSugarData.length > 0 ? (
                                                 bloodSugarData
-                                                        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
                                                         .slice(0, 5)
                                                         .map((reading, index) => (
                                                                 <View key={reading.id}>
@@ -338,7 +568,7 @@ export default function BloodSugarScreen() {
                                                                                         <Text style={styles.readingMealStatus}>
                                                                                                 {reading.mealStatus.charAt(0).toUpperCase() + reading.mealStatus.slice(1)}
                                                                                         </Text>
-                                                                                        {reading.prescriptionImageUri && (
+                                                                                        {reading.prescriptionImageUrl && (
                                                                                                 <View style={styles.hasImageIndicator}>
                                                                                                         <Icon name="image" type="feather" size={12} color="#fff" />
                                                                                                         <Text style={styles.hasImageText}>Prescription</Text>
@@ -350,7 +580,7 @@ export default function BloodSugarScreen() {
                                                                                         <Text style={styles.readingTime}>{format(new Date(reading.timestamp), "h:mm a")}</Text>
                                                                                 </View>
                                                                         </TouchableOpacity>
-                                                                        {index < bloodSugarData.length - 1 && <Divider style={styles.divider} />}
+                                                                        {index < bloodSugarData.slice(0, 5).length - 1 && <Divider style={styles.divider} />}
                                                                 </View>
                                                         ))
                                         ) : (
@@ -358,7 +588,12 @@ export default function BloodSugarScreen() {
                                         )}
 
                                         {bloodSugarData.length > 5 && (
-                                                <Button title="View All Readings" type="outline" buttonStyle={styles.viewAllButton} />
+                                                <Button
+                                                        title="View All Readings"
+                                                        type="outline"
+                                                        buttonStyle={styles.viewAllButton}
+                                                        onPress={() => {/* Navigate to all readings screen */ }}
+                                                />
                                         )}
                                 </Card>
                         </ScrollView>
@@ -397,11 +632,11 @@ export default function BloodSugarScreen() {
                                                                         </View>
                                                                 )}
 
-                                                                {selectedReading.prescriptionImageUri ? (
+                                                                {selectedReading.prescriptionImageUrl ? (
                                                                         <View style={styles.modalImageSection}>
                                                                                 <Text style={styles.modalSectionTitle}>Prescription:</Text>
                                                                                 <Image
-                                                                                        source={{ uri: selectedReading.prescriptionImageUri }}
+                                                                                        source={{ uri: selectedReading.prescriptionImageUrl }}
                                                                                         style={styles.modalImage}
                                                                                         resizeMode="contain"
                                                                                 />
@@ -409,13 +644,38 @@ export default function BloodSugarScreen() {
                                                                 ) : (
                                                                         <Text style={styles.noImageText}>No prescription image available</Text>
                                                                 )}
+
+                                                                <View style={styles.modalButtonsContainer}>
+                                                                        <Button
+                                                                                title="Delete"
+                                                                                type="outline"
+                                                                                buttonStyle={styles.deleteButton}
+                                                                                onPress={() => {
+                                                                                        Alert.alert(
+                                                                                                "Confirm Delete",
+                                                                                                "Are you sure you want to delete this reading?",
+                                                                                                [
+                                                                                                        { text: "Cancel", style: "cancel" },
+                                                                                                        {
+                                                                                                                text: "Delete",
+                                                                                                                style: "destructive",
+                                                                                                                onPress: () => deleteReading(
+                                                                                                                        selectedReading.id,
+                                                                                                                        selectedReading.prescriptionImageUrl
+                                                                                                                )
+                                                                                                        }
+                                                                                                ]
+                                                                                        );
+                                                                                }}
+                                                                        />
+                                                                </View>
                                                         </>
                                                 )}
                                         </View>
                                 </View>
                         </Modal>
                 </SafeAreaView>
-        )
+        );
 }
 
 const styles = StyleSheet.create({

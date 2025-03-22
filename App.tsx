@@ -4,8 +4,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context"
 import { NavigationContainer } from "@react-navigation/native"
 import { ThemeProvider } from "@rneui/themed"
 import * as Notifications from "expo-notifications"
-import Navigation from "./navigation"
+import AppNavigator from "./navigation/AppNavigator"  // Updated import path
 import { theme } from "./constants/theme"
+import { AuthProvider } from "./context/AuthContext"  // Make sure to import AuthProvider
 
 // Configure notification handler
 Notifications.setNotificationHandler({
@@ -30,10 +31,12 @@ export default function App() {
         return (
                 <SafeAreaProvider>
                         <ThemeProvider theme={theme}>
-                                <NavigationContainer>
-                                        <Navigation />
-                                        <StatusBar style="auto" />
-                                </NavigationContainer>
+                                <AuthProvider>
+                                        <NavigationContainer>
+                                                <AppNavigator />
+                                                <StatusBar style="auto" />
+                                        </NavigationContainer>
+                                </AuthProvider>
                         </ThemeProvider>
                 </SafeAreaProvider>
         )
