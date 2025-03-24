@@ -31,7 +31,7 @@ export default function BloodSugarScreen() {
         const [newReading, setNewReading] = useState("")
         const [mealStatus, setMealStatus] = useState<"before" | "after" | "fasting">("fasting")
         const [notes, setNotes] = useState("")
-        const [timeFrame, setTimeFrame] = useState<"weekly" | "monthly" | "yearly">("weekly")
+        const [timeFrame, setTimeFrame] = useState<"weekly" | "monthly" | "allTime">("weekly")
         const [loading, setLoading] = useState(true)
         const [isRefreshing, setIsRefreshing] = useState(false)
         const [downloadLoading, setDownloadLoading] = useState(false)
@@ -284,14 +284,8 @@ export default function BloodSugarScreen() {
                                 const readingDate = new Date(reading.timestamp);
                                 return readingDate >= oneMonthAgo;
                         });
-                } else if (timeFrame === "yearly") {
-                        // Filter for the current year
-                        const startOfCurrentYear = startOfYear(now);
-                        filteredData = filteredData.filter((reading) => {
-                                const readingDate = new Date(reading.timestamp);
-                                return readingDate >= startOfCurrentYear;
-                        });
                 }
+                // For "allTime", we don't apply any date filtering
 
                 // Sort the filtered data by timestamp
                 return filteredData.sort((a, b) => a.timestamp - b.timestamp);
@@ -316,7 +310,7 @@ export default function BloodSugarScreen() {
                         } else if (timeFrame === "monthly") {
                                 return format(date, "MM/dd"); // Show month/day for monthly view
                         } else {
-                                return format(date, "MMM"); // Show month name for yearly view
+                                return format(date, "MM/dd/yy"); // Show full date for all time view
                         }
                 });
 
@@ -375,13 +369,8 @@ export default function BloodSugarScreen() {
                                 csvContent += `${readingDate},${readingTime},${reading.value},${reading.mealStatus},${notes}\n`;
                         });
 
-                        // Create a summary section
-                        csvContent += "\nSummary Statistics\n";
-                        csvContent += `Time Period,${timeFrame}\n`;
-                        csvContent += `Average Blood Sugar,${getAverageBloodSugar()} mg/dL\n`;
-                        csvContent += `Highest Reading,${getHighestBloodSugar()} mg/dL\n`;
-                        csvContent += `Lowest Reading,${getLowestBloodSugar()} mg/dL\n`;
-                        csvContent += `Total Readings,${filteredData.length}\n`;
+                        // In the downloadReport function, update the summary section:
+                        csvContent += `Time Period,${timeFrame === "allTime" ? "All Time" : timeFrame}\n`;
 
                         // Create a file name with current date
                         const fileName = `blood_sugar_report_${format(new Date(), "yyyyMMdd")}.csv`;
@@ -392,12 +381,10 @@ export default function BloodSugarScreen() {
                                 encoding: FileSystem.EncodingType.UTF8
                         });
 
-                        // Share the file
                         if (Platform.OS === "ios" || Platform.OS === "android") {
                                 if (await Sharing.isAvailableAsync()) {
                                         await Sharing.shareAsync(fileUri);
                                 } else {
-                                        // If sharing is not available, try to use the Share API
                                         Share.share({
                                                 title: "Blood Sugar Report",
                                                 message: "Your blood sugar report is attached",
@@ -579,10 +566,10 @@ export default function BloodSugarScreen() {
                                                         </TouchableOpacity>
 
                                                         <TouchableOpacity
-                                                                style={[styles.timeFrameButton, timeFrame === "yearly" && styles.timeFrameButtonActive]}
-                                                                onPress={() => setTimeFrame("yearly")}
+                                                                style={[styles.timeFrameButton, timeFrame === "allTime" && styles.timeFrameButtonActive]}
+                                                                onPress={() => setTimeFrame("allTime")}
                                                         >
-                                                                <Text style={timeFrame === "yearly" ? styles.timeFrameTextActive : styles.timeFrameText}>Yearly</Text>
+                                                                <Text style={timeFrame === "allTime" ? styles.timeFrameTextActive : styles.timeFrameText}>All Time</Text>
                                                         </TouchableOpacity>
                                                 </View>
 
