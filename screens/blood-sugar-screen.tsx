@@ -1,14 +1,15 @@
-
 "use client"
 
 import { useState, useEffect } from "react"
-import { ScrollView, View, StyleSheet, TouchableOpacity, Alert, Image, Modal, Platform } from "react-native"
+import { ScrollView, View, StyleSheet, TouchableOpacity, Alert, Image, Modal, Platform, Share } from "react-native"
 import { Text, Card, Button, Input, Icon, Divider } from "@rneui/themed"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { LineChart } from "react-native-chart-kit"
 import { Dimensions } from "react-native"
-import { format, parse, isValid } from "date-fns"
+import { format, parse, isValid, subWeeks, subMonths, subYears, startOfYear } from "date-fns"
 import * as ImagePicker from "expo-image-picker"
+import * as FileSystem from "expo-file-system"
+import * as Sharing from "expo-sharing"
 import { useAuth } from "../context/AuthContext" // Assuming you have an auth context
 import {
         getBloodSugarReadings,
@@ -30,9 +31,10 @@ export default function BloodSugarScreen() {
         const [newReading, setNewReading] = useState("")
         const [mealStatus, setMealStatus] = useState<"before" | "after" | "fasting">("fasting")
         const [notes, setNotes] = useState("")
-        const [timeFrame, setTimeFrame] = useState<"daily" | "weekly" | "monthly">("daily")
+        const [timeFrame, setTimeFrame] = useState<"weekly" | "monthly" | "yearly">("weekly")
         const [loading, setLoading] = useState(true)
         const [isRefreshing, setIsRefreshing] = useState(false)
+        const [downloadLoading, setDownloadLoading] = useState(false)
 
         // Date and time input state
         const [dateInput, setDateInput] = useState("")
@@ -268,31 +270,26 @@ export default function BloodSugarScreen() {
                         id: reading.id || Object.keys(bloodSugarData).find(key => bloodSugarData[key] === reading)
                 }));
 
-                if (timeFrame === "daily") {
-                        // Filter for the current day only
-                        filteredData = filteredData.filter((reading) => {
-                                const readingDate = new Date(reading.timestamp);
-                                return (
-                                        readingDate.getDate() === now.getDate() &&
-                                        readingDate.getMonth() === now.getMonth() &&
-                                        readingDate.getFullYear() === now.getFullYear()
-                                );
-                        });
-                } else if (timeFrame === "weekly") {
+                if (timeFrame === "weekly") {
                         // Filter for the last 7 days
-                        const oneWeekAgo = new Date(now);
-                        oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+                        const oneWeekAgo = subWeeks(now, 1);
                         filteredData = filteredData.filter((reading) => {
                                 const readingDate = new Date(reading.timestamp);
                                 return readingDate >= oneWeekAgo;
                         });
                 } else if (timeFrame === "monthly") {
                         // Filter for the last 30 days
-                        const oneMonthAgo = new Date(now);
-                        oneMonthAgo.setDate(oneMonthAgo.getDate() - 30);
+                        const oneMonthAgo = subMonths(now, 1);
                         filteredData = filteredData.filter((reading) => {
                                 const readingDate = new Date(reading.timestamp);
                                 return readingDate >= oneMonthAgo;
+                        });
+                } else if (timeFrame === "yearly") {
+                        // Filter for the current year
+                        const startOfCurrentYear = startOfYear(now);
+                        filteredData = filteredData.filter((reading) => {
+                                const readingDate = new Date(reading.timestamp);
+                                return readingDate >= startOfCurrentYear;
                         });
                 }
 
@@ -314,12 +311,12 @@ export default function BloodSugarScreen() {
                 // Create appropriate time labels based on the timeFrame
                 let labels = filteredData.map((reading) => {
                         const date = new Date(reading.timestamp);
-                        if (timeFrame === "daily") {
-                                return format(date, "HH:mm");
-                        } else if (timeFrame === "weekly") {
+                        if (timeFrame === "weekly") {
                                 return format(date, "EEE dd"); // Show day of week and date
-                        } else {
+                        } else if (timeFrame === "monthly") {
                                 return format(date, "MM/dd"); // Show month/day for monthly view
+                        } else {
+                                return format(date, "MMM"); // Show month name for yearly view
                         }
                 });
 
@@ -355,348 +352,422 @@ export default function BloodSugarScreen() {
                 return Math.min(...filteredData.map((reading) => reading.value));
         };
 
+        // Function to generate and download a report
+        const downloadReport = async () => {
+                try {
+                        setDownloadLoading(true);
+
+                        const filteredData = getFilteredData();
+                        if (filteredData.length === 0) {
+                                Alert.alert("No Data", "There is no data available for the selected time frame");
+                                setDownloadLoading(false);
+                                return;
+                        }
+
+                        // Create a CSV report
+                        let csvContent = "Date,Time,Blood Sugar (mg/dL),Meal Status,Notes\n";
+
+                        filteredData.forEach(reading => {
+                                const readingDate = format(new Date(reading.timestamp), "MM/dd/yyyy");
+                                const readingTime = format(new Date(reading.timestamp), "hh:mm a");
+                                const notes = reading.notes ? reading.notes.replace(/,/g, ";").replace(/\n/g, " ") : "";
+
+                                csvContent += `${readingDate},${readingTime},${reading.value},${reading.mealStatus},${notes}\n`;
+                        });
+
+                        // Create a summary section
+                        csvContent += "\nSummary Statistics\n";
+                        csvContent += `Time Period,${timeFrame}\n`;
+                        csvContent += `Average Blood Sugar,${getAverageBloodSugar()} mg/dL\n`;
+                        csvContent += `Highest Reading,${getHighestBloodSugar()} mg/dL\n`;
+                        csvContent += `Lowest Reading,${getLowestBloodSugar()} mg/dL\n`;
+                        csvContent += `Total Readings,${filteredData.length}\n`;
+
+                        // Create a file name with current date
+                        const fileName = `blood_sugar_report_${format(new Date(), "yyyyMMdd")}.csv`;
+                        const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+                        // Write the CSV content to a file
+                        await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+                                encoding: FileSystem.EncodingType.UTF8
+                        });
+
+                        // Share the file
+                        if (Platform.OS === "ios" || Platform.OS === "android") {
+                                if (await Sharing.isAvailableAsync()) {
+                                        await Sharing.shareAsync(fileUri);
+                                } else {
+                                        // If sharing is not available, try to use the Share API
+                                        Share.share({
+                                                title: "Blood Sugar Report",
+                                                message: "Your blood sugar report is attached",
+                                                url: fileUri
+                                        });
+                                }
+                        }
+
+                        Alert.alert("Success", "Report has been generated and shared");
+                } catch (error) {
+                        console.error("Error generating report:", error);
+                        Alert.alert("Error", "Failed to generate the report");
+                } finally {
+                        setDownloadLoading(false);
+                }
+        };
+
         return (
-                <SafeAreaView style={styles.container}>
-                        <ScrollView
-                                refreshing={isRefreshing}
-                                onRefresh={handleRefresh}
-                        >
-                                <Card containerStyle={styles.card}>
-                                        <Card.Title>Add Blood Sugar Reading</Card.Title>
-                                        <Card.Divider />
-
-                                        <Input
-                                                label="Blood Sugar Level (mg/dL)"
-                                                placeholder="Enter your reading"
-                                                keyboardType="numeric"
-                                                value={newReading}
-                                                onChangeText={setNewReading}
-                                                leftIcon={<Icon name="droplet" type="feather" size={24} color={colors.bloodSugar} />}
-                                                disabled={loading}
-                                        />
-
-                                        <Text style={styles.label}>Meal Status</Text>
-                                        <View style={styles.mealStatusContainer}>
-                                                <TouchableOpacity
-                                                        style={[styles.mealStatusButton, mealStatus === "before" && styles.mealStatusButtonActive]}
-                                                        onPress={() => setMealStatus("before")}
-                                                        disabled={loading}
-                                                >
-                                                        <Text style={mealStatus === "before" ? styles.mealStatusTextActive : styles.mealStatusText}>
-                                                                Before Meal
-                                                        </Text>
-                                                </TouchableOpacity>
-
-                                                <TouchableOpacity
-                                                        style={[styles.mealStatusButton, mealStatus === "after" && styles.mealStatusButtonActive]}
-                                                        onPress={() => setMealStatus("after")}
-                                                        disabled={loading}
-                                                >
-                                                        <Text style={mealStatus === "after" ? styles.mealStatusTextActive : styles.mealStatusText}>
-                                                                After Meal
-                                                        </Text>
-                                                </TouchableOpacity>
-
-                                                <TouchableOpacity
-                                                        style={[styles.mealStatusButton, mealStatus === "fasting" && styles.mealStatusButtonActive]}
-                                                        onPress={() => setMealStatus("fasting")}
-                                                        disabled={loading}
-                                                >
-                                                        <Text style={mealStatus === "fasting" ? styles.mealStatusTextActive : styles.mealStatusText}>
-                                                                Fasting
-                                                        </Text>
-                                                </TouchableOpacity>
-                                        </View>
-
-                                        {/* Date and Time Input Section */}
-                                        <Text style={styles.label}>Date and Time</Text>
-
-                                        <TouchableOpacity
-                                                style={styles.currentTimeToggle}
-                                                onPress={toggleUseCurrentDateTime}
-                                                disabled={loading}
-                                        >
-                                                <Icon
-                                                        name={useCurrentDateTime ? "check-square" : "square"}
-                                                        type="feather"
-                                                        size={20}
-                                                        color={colors.bloodSugar}
-                                                />
-                                                <Text style={styles.currentTimeToggleText}>
-                                                        Use current date and time
-                                                </Text>
-                                        </TouchableOpacity>
-
-                                        <View style={styles.dateTimeContainer}>
-                                                <Input
-                                                        label="Date"
-                                                        placeholder="MM/DD/YYYY"
-                                                        value={dateInput}
-                                                        onChangeText={handleDateChange}
-                                                        leftIcon={<Icon name="calendar" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
-                                                        disabled={useCurrentDateTime || loading}
-                                                        errorMessage={dateError}
-                                                        containerStyle={styles.dateTimeInput}
-                                                        style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
-                                                />
+                <>
+                        <SafeAreaView style={styles.container}>
+                                <ScrollView
+                                        refreshing={isRefreshing}
+                                        onRefresh={handleRefresh}
+                                >
+                                        <Card containerStyle={styles.card}>
+                                                <Card.Title>Add Blood Sugar Reading</Card.Title>
+                                                <Card.Divider />
 
                                                 <Input
-                                                        label="Time"
-                                                        placeholder="hh:mm AM/PM"
-                                                        value={timeInput}
-                                                        onChangeText={handleTimeChange}
-                                                        leftIcon={<Icon name="clock" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
-                                                        disabled={useCurrentDateTime || loading}
-                                                        errorMessage={timeError}
-                                                        containerStyle={styles.dateTimeInput}
-                                                        style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
+                                                        label="Blood Sugar Level (mg/dL)"
+                                                        placeholder="Enter your reading"
+                                                        keyboardType="numeric"
+                                                        value={newReading}
+                                                        onChangeText={setNewReading}
+                                                        leftIcon={<Icon name="droplet" type="feather" size={24} color={colors.bloodSugar} />}
+                                                        disabled={loading}
                                                 />
-                                        </View>
 
-                                        <Input
-                                                label="Notes (Optional)"
-                                                placeholder="Add any notes here"
-                                                multiline
-                                                value={notes}
-                                                onChangeText={setNotes}
-                                                leftIcon={<Icon name="file-text" type="feather" size={24} color="#888" />}
-                                                disabled={loading}
-                                        />
-
-                                        {/* Prescription Image Upload Section */}
-                                        <Text style={styles.label}>Prescription Image</Text>
-                                        <View style={styles.imageContainer}>
-                                                {prescriptionImage ? (
-                                                        <View style={styles.imagePreviewContainer}>
-                                                                <Image source={{ uri: prescriptionImage }} style={styles.imagePreview} />
-                                                                <TouchableOpacity
-                                                                        style={styles.removeImageButton}
-                                                                        onPress={() => setPrescriptionImage(null)}
-                                                                        disabled={loading}
-                                                                >
-                                                                        <Icon name="x-circle" type="feather" size={24} color="#ff4444" />
-                                                                </TouchableOpacity>
-                                                        </View>
-                                                ) : (
+                                                <Text style={styles.label}>Meal Status</Text>
+                                                <View style={styles.mealStatusContainer}>
                                                         <TouchableOpacity
-                                                                style={styles.uploadButton}
-                                                                onPress={pickImage}
+                                                                style={[styles.mealStatusButton, mealStatus === "before" && styles.mealStatusButtonActive]}
+                                                                onPress={() => setMealStatus("before")}
                                                                 disabled={loading}
                                                         >
-                                                                <Icon name="camera" type="feather" size={24} color="#888" />
-                                                                <Text style={styles.uploadText}>Upload Prescription</Text>
+                                                                <Text style={mealStatus === "before" ? styles.mealStatusTextActive : styles.mealStatusText}>
+                                                                        Before Meal
+                                                                </Text>
                                                         </TouchableOpacity>
-                                                )}
-                                        </View>
 
-                                        <Button
-                                                title={loading ? "Adding..." : "Add Reading"}
-                                                icon={loading ? null : <Icon name="plus" type="feather" color="#ffffff" style={{ marginRight: 10 }} />}
-                                                onPress={addReading}
-                                                loading={loading}
-                                                disabled={loading}
-                                        />
-                                </Card>
+                                                        <TouchableOpacity
+                                                                style={[styles.mealStatusButton, mealStatus === "after" && styles.mealStatusButtonActive]}
+                                                                onPress={() => setMealStatus("after")}
+                                                                disabled={loading}
+                                                        >
+                                                                <Text style={mealStatus === "after" ? styles.mealStatusTextActive : styles.mealStatusText}>
+                                                                        After Meal
+                                                                </Text>
+                                                        </TouchableOpacity>
 
-                                {/* Rest of the component remains unchanged */}
-                                <Card containerStyle={styles.card}>
-                                        <Card.Title>Blood Sugar Trends</Card.Title>
-                                        <Card.Divider />
+                                                        <TouchableOpacity
+                                                                style={[styles.mealStatusButton, mealStatus === "fasting" && styles.mealStatusButtonActive]}
+                                                                onPress={() => setMealStatus("fasting")}
+                                                                disabled={loading}
+                                                        >
+                                                                <Text style={mealStatus === "fasting" ? styles.mealStatusTextActive : styles.mealStatusText}>
+                                                                        Fasting
+                                                                </Text>
+                                                        </TouchableOpacity>
+                                                </View>
 
-                                        <View style={styles.timeFrameContainer}>
-                                                <TouchableOpacity
-                                                        style={[styles.timeFrameButton, timeFrame === "daily" && styles.timeFrameButtonActive]}
-                                                        onPress={() => setTimeFrame("daily")}
-                                                >
-                                                        <Text style={timeFrame === "daily" ? styles.timeFrameTextActive : styles.timeFrameText}>Daily</Text>
-                                                </TouchableOpacity>
-
-                                                <TouchableOpacity
-                                                        style={[styles.timeFrameButton, timeFrame === "weekly" && styles.timeFrameButtonActive]}
-                                                        onPress={() => setTimeFrame("weekly")}
-                                                >
-                                                        <Text style={timeFrame === "weekly" ? styles.timeFrameTextActive : styles.timeFrameText}>Weekly</Text>
-                                                </TouchableOpacity>
+                                                {/* Date and Time Input Section */}
+                                                <Text style={styles.label}>Date and Time</Text>
 
                                                 <TouchableOpacity
-                                                        style={[styles.timeFrameButton, timeFrame === "monthly" && styles.timeFrameButtonActive]}
-                                                        onPress={() => setTimeFrame("monthly")}
+                                                        style={styles.currentTimeToggle}
+                                                        onPress={toggleUseCurrentDateTime}
+                                                        disabled={loading}
                                                 >
-                                                        <Text style={timeFrame === "monthly" ? styles.timeFrameTextActive : styles.timeFrameText}>Monthly</Text>
+                                                        <Icon
+                                                                name={useCurrentDateTime ? "check-square" : "square"}
+                                                                type="feather"
+                                                                size={20}
+                                                                color={colors.bloodSugar}
+                                                        />
+                                                        <Text style={styles.currentTimeToggleText}>
+                                                                Use current date and time
+                                                        </Text>
                                                 </TouchableOpacity>
-                                        </View>
 
-                                        <View style={styles.statsContainer}>
-                                                <View style={styles.statItem}>
-                                                        <Text style={styles.statValue}>{getAverageBloodSugar()}</Text>
-                                                        <Text style={styles.statLabel}>Average</Text>
-                                                </View>
-                                                <View style={styles.statItem}>
-                                                        <Text style={styles.statValue}>{getHighestBloodSugar()}</Text>
-                                                        <Text style={styles.statLabel}>Highest</Text>
-                                                </View>
-                                                <View style={styles.statItem}>
-                                                        <Text style={styles.statValue}>{getLowestBloodSugar()}</Text>
-                                                        <Text style={styles.statLabel}>Lowest</Text>
-                                                </View>
-                                        </View>
+                                                <View style={styles.dateTimeContainer}>
+                                                        <Input
+                                                                label="Date"
+                                                                placeholder="MM/DD/YYYY"
+                                                                value={dateInput}
+                                                                onChangeText={handleDateChange}
+                                                                leftIcon={<Icon name="calendar" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
+                                                                disabled={useCurrentDateTime || loading}
+                                                                errorMessage={dateError}
+                                                                containerStyle={styles.dateTimeInput}
+                                                                style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
+                                                        />
 
-                                        {getFilteredData().length > 0 ? (
-                                                <LineChart
-                                                        data={getChartData()}
-                                                        width={Dimensions.get("window").width - 60}
-                                                        height={220}
-                                                        chartConfig={{
-                                                                backgroundColor: "#ffffff",
-                                                                backgroundGradientFrom: "#ffffff",
-                                                                backgroundGradientTo: "#ffffff",
-                                                                decimalPlaces: 0,
-                                                                color: () => colors.bloodSugar,
-                                                                labelColor: () => "#333333",
-                                                                style: {
-                                                                        borderRadius: 16,
-                                                                },
-                                                                propsForDots: {
-                                                                        r: "6",
-                                                                        strokeWidth: "2",
-                                                                        stroke: colors.bloodSugar,
-                                                                },
-                                                        }}
-                                                        bezier
-                                                        style={styles.chart}
+                                                        <Input
+                                                                label="Time"
+                                                                placeholder="hh:mm AM/PM"
+                                                                value={timeInput}
+                                                                onChangeText={handleTimeChange}
+                                                                leftIcon={<Icon name="clock" type="feather" size={18} color={useCurrentDateTime ? "#aaa" : colors.bloodSugar} />}
+                                                                disabled={useCurrentDateTime || loading}
+                                                                errorMessage={timeError}
+                                                                containerStyle={styles.dateTimeInput}
+                                                                style={useCurrentDateTime ? styles.dateTimeTextDisabled : null}
+                                                        />
+                                                </View>
+
+                                                <Input
+                                                        label="Notes (Optional)"
+                                                        placeholder="Add any notes here"
+                                                        multiline
+                                                        value={notes}
+                                                        onChangeText={setNotes}
+                                                        leftIcon={<Icon name="file-text" type="feather" size={24} color="#888" />}
+                                                        disabled={loading}
                                                 />
-                                        ) : (
-                                                <Text style={styles.noDataText}>No data available for the selected time frame</Text>
-                                        )}
-                                </Card>
 
-                                <Card containerStyle={styles.card}>
-                                        <Card.Title>Recent Readings</Card.Title>
-                                        <Card.Divider />
-
-                                        {loading && bloodSugarData.length === 0 ? (
-                                                <Text style={styles.loadingText}>Loading readings...</Text>
-                                        ) : bloodSugarData.length > 0 ? (
-                                                bloodSugarData
-                                                        .slice(0, 5)
-                                                        .map((reading, index) => (
-                                                                <View key={reading.id}>
+                                                {/* Prescription Image Upload Section */}
+                                                <Text style={styles.label}>Prescription Image</Text>
+                                                <View style={styles.imageContainer}>
+                                                        {prescriptionImage ? (
+                                                                <View style={styles.imagePreviewContainer}>
+                                                                        <Image source={{ uri: prescriptionImage }} style={styles.imagePreview} />
                                                                         <TouchableOpacity
-                                                                                style={styles.readingItem}
-                                                                                onPress={() => openReadingModal(reading)}
+                                                                                style={styles.removeImageButton}
+                                                                                onPress={() => setPrescriptionImage(null)}
+                                                                                disabled={loading}
                                                                         >
-                                                                                <View>
-                                                                                        <Text style={styles.readingValue}>{reading.value} mg/dL</Text>
-                                                                                        <Text style={styles.readingMealStatus}>
-                                                                                                {reading.mealStatus.charAt(0).toUpperCase() + reading.mealStatus.slice(1)}
-                                                                                        </Text>
-                                                                                        {reading.prescriptionImageUrl && (
-                                                                                                <View style={styles.hasImageIndicator}>
-                                                                                                        <Icon name="image" type="feather" size={12} color="#fff" />
-                                                                                                        <Text style={styles.hasImageText}>Prescription</Text>
-                                                                                                </View>
-                                                                                        )}
-                                                                                </View>
-                                                                                <View>
-                                                                                        <Text style={styles.readingDate}>{format(new Date(reading.timestamp), "MMM dd, yyyy")}</Text>
-                                                                                        <Text style={styles.readingTime}>{format(new Date(reading.timestamp), "h:mm a")}</Text>
-                                                                                </View>
+                                                                                <Icon name="x-circle" type="feather" size={24} color="#ff4444" />
                                                                         </TouchableOpacity>
-                                                                        {index < bloodSugarData.slice(0, 5).length - 1 && <Divider style={styles.divider} />}
                                                                 </View>
-                                                        ))
-                                        ) : (
-                                                <Text style={styles.noDataText}>No readings available</Text>
-                                        )}
+                                                        ) : (
+                                                                <TouchableOpacity
+                                                                        style={styles.uploadButton}
+                                                                        onPress={pickImage}
+                                                                        disabled={loading}
+                                                                >
+                                                                        <Icon name="camera" type="feather" size={24} color="#888" />
+                                                                        <Text style={styles.uploadText}>Upload Prescription</Text>
+                                                                </TouchableOpacity>
+                                                        )}
+                                                </View>
 
-                                        {bloodSugarData.length > 5 && (
                                                 <Button
-                                                        title="View All Readings"
-                                                        type="outline"
-                                                        buttonStyle={styles.viewAllButton}
-                                                        onPress={() => {/* Navigate to all readings screen */ }}
+                                                        title={loading ? "Adding..." : "Add Reading"}
+                                                        icon={loading ? null : <Icon name="plus" type="feather" color="#ffffff" style={{ marginRight: 10 }} />}
+                                                        onPress={addReading}
+                                                        loading={loading}
+                                                        disabled={loading}
                                                 />
-                                        )}
-                                </Card>
-                        </ScrollView>
+                                        </Card>
 
-                        {/* Modal for displaying reading details with prescription image */}
-                        <Modal
-                                animationType="slide"
-                                transparent={true}
-                                visible={modalVisible}
-                                onRequestClose={() => setModalVisible(false)}
-                        >
-                                <View style={styles.modalContainer}>
-                                        <View style={styles.modalContent}>
-                                                <TouchableOpacity
-                                                        style={styles.closeButton}
-                                                        onPress={() => setModalVisible(false)}
-                                                >
-                                                        <Icon name="x" type="feather" size={24} color="#333" />
-                                                </TouchableOpacity>
+                                        <Card containerStyle={styles.card}>
+                                                <Card.Title>Blood Sugar Trends</Card.Title>
+                                                <Card.Divider />
 
-                                                {selectedReading && (
-                                                        <>
-                                                                <Text style={styles.modalTitle}>Blood Sugar Reading</Text>
-                                                                <Text style={styles.modalValue}>{selectedReading.value} mg/dL</Text>
-                                                                <Text style={styles.modalDate}>
-                                                                        {format(new Date(selectedReading.timestamp), "MMMM dd, yyyy 'at' h:mm a")}
-                                                                </Text>
-                                                                <Text style={styles.modalMealStatus}>
-                                                                        {selectedReading.mealStatus.charAt(0).toUpperCase() + selectedReading.mealStatus.slice(1)}
-                                                                </Text>
+                                                <View style={styles.timeFrameContainer}>
+                                                        <TouchableOpacity
+                                                                style={[styles.timeFrameButton, timeFrame === "weekly" && styles.timeFrameButtonActive]}
+                                                                onPress={() => setTimeFrame("weekly")}
+                                                        >
+                                                                <Text style={timeFrame === "weekly" ? styles.timeFrameTextActive : styles.timeFrameText}>Weekly</Text>
+                                                        </TouchableOpacity>
 
-                                                                {selectedReading.notes && (
-                                                                        <View style={styles.modalNotesSection}>
-                                                                                <Text style={styles.modalSectionTitle}>Notes:</Text>
-                                                                                <Text style={styles.modalNotes}>{selectedReading.notes}</Text>
+                                                        <TouchableOpacity
+                                                                style={[styles.timeFrameButton, timeFrame === "monthly" && styles.timeFrameButtonActive]}
+                                                                onPress={() => setTimeFrame("monthly")}
+                                                        >
+                                                                <Text style={timeFrame === "monthly" ? styles.timeFrameTextActive : styles.timeFrameText}>Monthly</Text>
+                                                        </TouchableOpacity>
+
+                                                        <TouchableOpacity
+                                                                style={[styles.timeFrameButton, timeFrame === "yearly" && styles.timeFrameButtonActive]}
+                                                                onPress={() => setTimeFrame("yearly")}
+                                                        >
+                                                                <Text style={timeFrame === "yearly" ? styles.timeFrameTextActive : styles.timeFrameText}>Yearly</Text>
+                                                        </TouchableOpacity>
+                                                </View>
+
+                                                <View style={styles.statsContainer}>
+                                                        <View style={styles.statItem}>
+                                                                <Text style={styles.statValue}>{getAverageBloodSugar()}</Text>
+                                                                <Text style={styles.statLabel}>Average</Text>
+                                                        </View>
+                                                        <View style={styles.statItem}>
+                                                                <Text style={styles.statValue}>{getHighestBloodSugar()}</Text>
+                                                                <Text style={styles.statLabel}>Highest</Text>
+                                                        </View>
+                                                        <View style={styles.statItem}>
+                                                                <Text style={styles.statValue}>{getLowestBloodSugar()}</Text>
+                                                                <Text style={styles.statLabel}>Lowest</Text>
+                                                        </View>
+                                                </View>
+
+                                                {getFilteredData().length > 0 ? (
+                                                        <LineChart
+                                                                data={getChartData()}
+                                                                width={Dimensions.get("window").width - 60}
+                                                                height={220}
+                                                                chartConfig={{
+                                                                        backgroundColor: "#ffffff",
+                                                                        backgroundGradientFrom: "#ffffff",
+                                                                        backgroundGradientTo: "#ffffff",
+                                                                        decimalPlaces: 0,
+                                                                        color: () => colors.bloodSugar,
+                                                                        labelColor: () => "#333333",
+                                                                        style: {
+                                                                                borderRadius: 16,
+                                                                        },
+                                                                        propsForDots: {
+                                                                                r: "6",
+                                                                                strokeWidth: "2",
+                                                                                stroke: colors.bloodSugar,
+                                                                        },
+                                                                }}
+                                                                bezier
+                                                                style={styles.chart}
+                                                        />
+                                                ) : (
+                                                        <Text style={styles.noDataText}>No data available for the selected time frame</Text>
+                                                )}
+
+                                                {/* Download Report Button */}
+                                                <Button
+                                                        title={downloadLoading ? "Generating Report..." : "Download Report"}
+                                                        icon={downloadLoading ? null : <Icon name="download" type="feather" color="#ffffff" style={{ marginRight: 10 }} />}
+                                                        onPress={downloadReport}
+                                                        loading={downloadLoading}
+                                                        disabled={downloadLoading || getFilteredData().length === 0}
+                                                        buttonStyle={styles.downloadButton}
+                                                />
+                                        </Card>
+
+                                        <Card containerStyle={styles.card}>
+                                                <Card.Title>Recent Readings</Card.Title>
+                                                <Card.Divider />
+
+                                                {loading && bloodSugarData.length === 0 ? (
+                                                        <Text style={styles.loadingText}>Loading readings...</Text>
+                                                ) : bloodSugarData.length > 0 ? (
+                                                        bloodSugarData
+                                                                .slice(0, 5)
+                                                                .map((reading, index) => (
+                                                                        <View key={reading.id}>
+                                                                                <TouchableOpacity
+                                                                                        style={styles.readingItem}
+                                                                                        onPress={() => openReadingModal(reading)}
+                                                                                >
+                                                                                        <View>
+                                                                                                <Text style={styles.readingValue}>{reading.value} mg/dL</Text>
+                                                                                                <Text style={styles.readingMealStatus}>
+                                                                                                        {reading.mealStatus.charAt(0).toUpperCase() + reading.mealStatus.slice(1)}
+                                                                                                </Text>
+                                                                                                {reading.prescriptionImageUrl && (
+                                                                                                        <View style={styles.hasImageIndicator}>
+                                                                                                                <Icon name="image" type="feather" size={12} color="#fff" />
+                                                                                                                <Text style={styles.hasImageText}>Prescription</Text>
+                                                                                                        </View>
+                                                                                                )}
+                                                                                        </View>
+                                                                                        <View>
+                                                                                                <Text style={styles.readingDate}>{format(new Date(reading.timestamp), "MMM dd, yyyy")}</Text>
+                                                                                                <Text style={styles.readingTime}>{format(new Date(reading.timestamp), "h:mm a")}</Text>
+                                                                                        </View>
+                                                                                </TouchableOpacity>
+                                                                                {index < bloodSugarData.slice(0, 5).length - 1 && <Divider style={styles.divider} />}
                                                                         </View>
-                                                                )}
+                                                                ))
+                                                ) : (
+                                                        <Text style={styles.noDataText}>No readings available</Text>
+                                                )}
 
-                                                                {selectedReading.prescriptionImageUrl ? (
-                                                                        <View style={styles.modalImageSection}>
-                                                                                <Text style={styles.modalSectionTitle}>Prescription:</Text>
-                                                                                <Image
-                                                                                        source={{ uri: selectedReading.prescriptionImageUrl }}
-                                                                                        style={styles.modalImage}
-                                                                                        resizeMode="contain"
+                                                {bloodSugarData.length > 5 && (
+                                                        <Button
+                                                                title="View All Readings"
+                                                                type="outline"
+                                                                buttonStyle={styles.viewAllButton}
+                                                                onPress={() => {/* Navigate to all readings screen */ }}
+                                                        />
+                                                )}
+                                        </Card>
+                                </ScrollView>
+
+                                {/* Modal for displaying reading details with prescription image */}
+                                <Modal
+                                        animationType="slide"
+                                        transparent={true}
+                                        visible={modalVisible}
+                                        onRequestClose={() => setModalVisible(false)}
+                                >
+                                        <View style={styles.modalContainer}>
+                                                <View style={styles.modalContent}>
+                                                        <TouchableOpacity
+                                                                style={styles.closeButton}
+                                                                onPress={() => setModalVisible(false)}
+                                                        >
+                                                                <Icon name="x" type="feather" size={24} color="#333" />
+                                                        </TouchableOpacity>
+
+                                                        {selectedReading && (
+                                                                <>
+                                                                        <Text style={styles.modalTitle}>Blood Sugar Reading</Text>
+                                                                        <Text style={styles.modalValue}>{selectedReading.value} mg/dL</Text>
+                                                                        <Text style={styles.modalDate}>
+                                                                                {format(new Date(selectedReading.timestamp), "MMMM dd, yyyy 'at' h:mm a")}
+                                                                        </Text>
+                                                                        <Text style={styles.modalMealStatus}>
+                                                                                {selectedReading.mealStatus.charAt(0).toUpperCase() + selectedReading.mealStatus.slice(1)}
+                                                                        </Text>
+
+                                                                        {selectedReading.notes && (
+                                                                                <View style={styles.modalNotesSection}>
+                                                                                        <Text style={styles.modalSectionTitle}>Notes:</Text>
+                                                                                        <Text style={styles.modalNotes}>{selectedReading.notes}</Text>
+                                                                                </View>
+                                                                        )}
+
+                                                                        {selectedReading.prescriptionImageUrl ? (
+                                                                                <View style={styles.modalImageSection}>
+                                                                                        <Text style={styles.modalSectionTitle}>Prescription:</Text>
+                                                                                        <Image
+                                                                                                source={{ uri: selectedReading.prescriptionImageUrl }}
+                                                                                                style={styles.modalImage}
+                                                                                                resizeMode="contain"
+                                                                                        />
+                                                                                </View>
+                                                                        ) : (
+                                                                                <Text style={styles.noImageText}>No prescription image available</Text>
+                                                                        )}
+
+                                                                        <View style={styles.modalButtonsContainer}>
+                                                                                <Button
+                                                                                        title="Delete"
+                                                                                        type="outline"
+                                                                                        buttonStyle={styles.deleteButton}
+                                                                                        onPress={() => {
+                                                                                                Alert.alert(
+                                                                                                        "Confirm Delete",
+                                                                                                        "Are you sure you want to delete this reading?",
+                                                                                                        [
+                                                                                                                { text: "Cancel", style: "cancel" },
+                                                                                                                {
+                                                                                                                        text: "Delete",
+                                                                                                                        style: "destructive",
+                                                                                                                        onPress: () => deleteReading(
+                                                                                                                                selectedReading.id,
+                                                                                                                                selectedReading.prescriptionImageUrl
+                                                                                                                        )
+                                                                                                                }
+                                                                                                        ]
+                                                                                                );
+                                                                                        }}
                                                                                 />
                                                                         </View>
-                                                                ) : (
-                                                                        <Text style={styles.noImageText}>No prescription image available</Text>
-                                                                )}
-
-                                                                <View style={styles.modalButtonsContainer}>
-                                                                        <Button
-                                                                                title="Delete"
-                                                                                type="outline"
-                                                                                buttonStyle={styles.deleteButton}
-                                                                                onPress={() => {
-                                                                                        Alert.alert(
-                                                                                                "Confirm Delete",
-                                                                                                "Are you sure you want to delete this reading?",
-                                                                                                [
-                                                                                                        { text: "Cancel", style: "cancel" },
-                                                                                                        {
-                                                                                                                text: "Delete",
-                                                                                                                style: "destructive",
-                                                                                                                onPress: () => deleteReading(
-                                                                                                                        selectedReading.id,
-                                                                                                                        selectedReading.prescriptionImageUrl
-                                                                                                                )
-                                                                                                        }
-                                                                                                ]
-                                                                                        );
-                                                                                }}
-                                                                        />
-                                                                </View>
-                                                        </>
-                                                )}
+                                                                </>
+                                                        )}
+                                                </View>
                                         </View>
-                                </View>
-                        </Modal>
-                </SafeAreaView>
+                                </Modal>
+                        </SafeAreaView>
+                </>
         );
 }
 

@@ -1,12 +1,13 @@
+// config/firebase.js
 import { initializeApp } from 'firebase/app';
-import { getDatabase } from 'firebase/database';
+import { getDatabase } from 'firebase/database'; // Import for Realtime Database
 import { getAuth } from 'firebase/auth';
 
-// Your web app's Firebase configuration
+// Your Firebase configuration
 const firebaseConfig={
         apiKey: "AIzaSyD04GBzKKyxBrSGL7LeLq99Y37YsEB6aOg",
         authDomain: "thirdeye-c5b2e.firebaseapp.com",
-        databaseURL: "https://thirdeye-c5b2e-default-rtdb.firebaseio.com",
+        databaseURL: "https://thirdeye-c5b2e-default-rtdb.firebaseio.com", // Realtime Database URL
         projectId: "thirdeye-c5b2e",
         storageBucket: "thirdeye-c5b2e.firebasestorage.app",
         messagingSenderId: "97667042020",
@@ -16,7 +17,7 @@ const firebaseConfig={
 
 // Initialize Firebase
 const app=initializeApp( firebaseConfig );
-const db=getDatabase( app );
+const db=getDatabase( app ); // Initialize Realtime Database
 const auth=getAuth( app );
 
 export { app, db, auth };
