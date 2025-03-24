@@ -11,9 +11,7 @@ import BloodSugarScreen from "../screens/blood-sugar-screen"
 import GoalsScreen from "../screens/goals-screen"
 import AppointmentsScreen from "../screens/appointments-screen"
 import HealthRiskScreen from "../screens/health-risk-screen"
-import StepCounterScreen from "../screens/step-counter-screen"
 import MedicationScreen from "../screens/medication-screen"
-import ProgressScreen from "../screens/progress-screen"
 import SettingsScreen from "../screens/settings-screen"
 import NutritionScreen from "../screens/nutrition-screen"
 import StepsCounter from "../screens/step-counter"
@@ -53,7 +51,6 @@ function MoreNavigator() {
                         <MoreStack.Screen name="HealthRisk" component={HealthRiskScreen} options={{ title: "Health Risk Assessment" }} />
                         <MoreStack.Screen name="StepCounter" component={StepsCounter} options={{ title: "Step Counter" }} />
                         <MoreStack.Screen name="Medication" component={MedicationScreen} options={{ title: "Medications & Reminders" }} />
-                        <MoreStack.Screen name="Progress" component={ProgressScreen} options={{ title: "Progress Monitoring" }} />
                         <MoreStack.Screen name="Nutrition" component={NutritionScreen} options={{ title: "AI Nutrition Advisor" }} />
                 </MoreStack.Navigator>
         )

@@ -1,530 +1,1015 @@
-'use client'
-// src/pages/HealthRiskScreen.js
-import React, { useState, useEffect } from 'react';
-import { ref, get, push, set, query, orderByChild } from 'firebase/database';
-import { db } from '../config/firebase';
+"use client"
 
-const DB_PATH = 'healthRiskArticles';
+import { useState, useEffect } from "react"
+import { ref, get, push, set, query, orderByChild } from "firebase/database"
+import { db } from "../config/firebase"
+import {
+        View,
+        Text,
+        TextInput,
+        ScrollView,
+        StyleSheet,
+        TouchableOpacity,
+        Image,
+        ActivityIndicator,
+        Alert,
+        KeyboardAvoidingView,
+        Platform,
+        SafeAreaView,
+} from "react-native"
+
+const DB_PATH = "healthRiskArticles"
 
 const HealthRiskScreen = () => {
         // State variables
-        const [articles, setArticles] = useState([]);
-        const [loading, setLoading] = useState(true);
-        const [error, setError] = useState(null);
-        const [showForm, setShowForm] = useState(false);
-        const [selectedArticle, setSelectedArticle] = useState(null);
+        const [articles, setArticles] = useState([])
+        const [loading, setLoading] = useState(true)
+        const [error, setError] = useState(null)
+        const [showForm, setShowForm] = useState(false)
+        const [selectedArticle, setSelectedArticle] = useState(null)
         const [formData, setFormData] = useState({
-                title: '',
-                summary: '',
-                content: '',
-                riskLevel: 'medium',
-                category: '',
-                tags: '',
-                imageUrl: ''
-        });
-        const [isSubmitting, setIsSubmitting] = useState(false);
+                title: "",
+                summary: "",
+                content: "",
+                riskLevel: "medium",
+                category: "",
+                tags: "",
+                imageUrl: "",
+        })
+        const [isSubmitting, setIsSubmitting] = useState(false)
 
         // Fetch articles on component mount
         useEffect(() => {
-                fetchArticles();
-        }, []);
+                fetchArticles()
+        }, [])
 
         // Fetch all articles from Firebase Realtime Database
         const fetchArticles = async () => {
                 try {
-                        setLoading(true);
-                        const articlesRef = query(
-                                ref(db, DB_PATH),
-                                orderByChild('createdAt')
-                        );
+                        setLoading(true)
+                        const articlesRef = query(ref(db, DB_PATH), orderByChild("createdAt"))
 
-                        const snapshot = await get(articlesRef);
+                        const snapshot = await get(articlesRef)
 
                         if (snapshot.exists()) {
-                                const articlesData = snapshot.val();
+                                const articlesData = snapshot.val()
 
                                 // Convert object to array and sort by createdAt descending
-                                const fetchedArticles = Object.entries(articlesData).map(([id, data]) => ({
-                                        id,
-                                        ...data
-                                })).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                                const fetchedArticles = Object.entries(articlesData)
+                                        .map(([id, data]) => ({
+                                                id,
+                                                ...data,
+                                        }))
+                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
 
-                                setArticles(fetchedArticles);
+                                setArticles(fetchedArticles)
                         } else {
                                 // No articles exist yet
-                                setArticles([]);
+                                setArticles([])
                         }
 
-                        setError(null);
+                        setError(null)
                 } catch (err) {
-                        setError('Failed to fetch health risk articles');
-                        console.error('Error fetching articles:', err);
+                        setError("Failed to fetch health risk articles")
+                        console.error("Error fetching articles:", err)
                 } finally {
-                        setLoading(false);
+                        setLoading(false)
                 }
-        };
+        }
 
         // Fetch a single article by ID
         const fetchArticleById = async (id) => {
                 try {
-                        setLoading(true);
-                        const articleRef = ref(db, `${DB_PATH}/${id}`);
-                        const snapshot = await get(articleRef);
+                        setLoading(true)
+                        const articleRef = ref(db, `${DB_PATH}/${id}`)
+                        const snapshot = await get(articleRef)
 
                         if (snapshot.exists()) {
                                 setSelectedArticle({
                                         id: id,
-                                        ...snapshot.val()
-                                });
+                                        ...snapshot.val(),
+                                })
                         } else {
-                                setError(`Article with ID ${id} not found`);
+                                setError(`Article with ID ${id} not found`)
                         }
                 } catch (err) {
-                        setError('Failed to fetch article details');
-                        console.error('Error fetching article:', err);
+                        setError("Failed to fetch article details")
+                        console.error("Error fetching article:", err)
                 } finally {
-                        setLoading(false);
+                        setLoading(false)
                 }
-        };
+        }
 
         // Handle form input changes
-        const handleChange = (e) => {
-                const { name, value } = e.target;
-                setFormData(prevData => ({
+        const handleChange = (name, value) => {
+                setFormData((prevData) => ({
                         ...prevData,
-                        [name]: value
-                }));
-        };
+                        [name]: value,
+                }))
+        }
 
         // Handle form submission
-        const handleSubmit = async (e) => {
-                e.preventDefault();
-
+        const handleSubmit = async () => {
                 // Validate form
                 if (!formData.title || !formData.content || !formData.category) {
-                        alert('Please fill out all required fields');
-                        return;
+                        Alert.alert("Error", "Please fill out all required fields")
+                        return
                 }
 
-                setIsSubmitting(true);
+                setIsSubmitting(true)
 
                 try {
                         // Process tags from comma-separated string to array
                         const processedData = {
                                 ...formData,
-                                tags: formData.tags ? formData.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [],
+                                tags: formData.tags
+                                        ? formData.tags
+                                                .split(",")
+                                                .map((tag) => tag.trim())
+                                                .filter((tag) => tag)
+                                        : [],
                                 createdAt: new Date().toISOString(),
-                                imageUrl: formData.imageUrl || '/default-health-article.jpg'
-                        };
+                                imageUrl: formData.imageUrl || "https://via.placeholder.com/150",
+                        }
 
                         // Add to Firebase Realtime Database
-                        const newArticleRef = push(ref(db, DB_PATH));
-                        await set(newArticleRef, processedData);
+                        const newArticleRef = push(ref(db, DB_PATH))
+                        await set(newArticleRef, processedData)
 
                         // Update the local state with the new article
-                        setArticles([
-                                { id: newArticleRef.key, ...processedData },
-                                ...articles
-                        ]);
+                        setArticles([{ id: newArticleRef.key, ...processedData }, ...articles])
 
                         // Reset form after successful submission
                         setFormData({
-                                title: '',
-                                summary: '',
-                                content: '',
-                                riskLevel: 'medium',
-                                category: '',
-                                tags: '',
-                                imageUrl: ''
-                        });
+                                title: "",
+                                summary: "",
+                                content: "",
+                                riskLevel: "medium",
+                                category: "",
+                                tags: "",
+                                imageUrl: "",
+                        })
 
-                        setShowForm(false);
-                        setError(null);
+                        setShowForm(false)
+                        setError(null)
 
-                        alert('Article added successfully!');
+                        Alert.alert("Success", "Article added successfully!")
                 } catch (err) {
-                        setError('Failed to add new article');
-                        console.error('Error adding article:', err);
+                        setError("Failed to add new article")
+                        console.error("Error adding article:", err)
                 } finally {
-                        setIsSubmitting(false);
+                        setIsSubmitting(false)
                 }
-        };
+        }
 
         // View an article in detail
         const viewArticle = (article) => {
-                setSelectedArticle(article);
-        };
+                setSelectedArticle(article)
+        }
 
         // Go back to article list
         const backToList = () => {
-                setSelectedArticle(null);
-        };
+                setSelectedArticle(null)
+        }
 
         // Format date for display
         const formatDate = (timestamp) => {
-                if (!timestamp) return 'Unknown date';
+                if (!timestamp) return "Unknown date"
 
-                const date = new Date(timestamp);
-                return date.toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                });
-        };
+                const date = new Date(timestamp)
+                return date.toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                })
+        }
 
         // Get color based on risk level
         const getRiskLevelColor = (level) => {
                 switch (level?.toLowerCase()) {
-                        case 'low':
-                                return 'bg-green-100 text-green-800';
-                        case 'medium':
-                                return 'bg-yellow-100 text-yellow-800';
-                        case 'high':
-                                return 'bg-orange-100 text-orange-800';
-                        case 'critical':
-                                return 'bg-red-100 text-red-800';
+                        case "low":
+                                return styles.lowRisk
+                        case "medium":
+                                return styles.mediumRisk
+                        case "high":
+                                return styles.highRisk
+                        case "critical":
+                                return styles.criticalRisk
                         default:
-                                return 'bg-gray-100 text-gray-800';
+                                return styles.defaultRisk
                 }
-        };
+        }
 
         // Truncate text for card view
         const truncateText = (text, maxLength = 120) => {
-                if (!text) return '';
-                return text.length > maxLength
-                        ? `${text.substring(0, maxLength)}...`
-                        : text;
-        };
+                if (!text) return ""
+                return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
+        }
 
         // Render the article form
         const renderArticleForm = () => (
-                <form onSubmit={handleSubmit} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-                        <h2 className="text-xl font-semibold mb-4">Add New Health Risk Article</h2>
-
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="title">
-                                        Title *
-                                </label>
-                                <input
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="title"
-                                        type="text"
-                                        name="title"
+                <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.keyboardAvoidingView}>
+                        <ScrollView
+                                style={styles.formContainer}
+                                contentContainerStyle={styles.formContentContainer}
+                                showsVerticalScrollIndicator={true}
+                        >
+                                <Text style={styles.formTitle}>Add New Health Risk Article</Text>
+                                <Text style={styles.label}>Title *</Text>
+                                <TextInput
+                                        style={styles.input}
                                         value={formData.title}
-                                        onChange={handleChange}
+                                        onChangeText={(text) => handleChange("title", text)}
+                                        placeholder="Title"
                                         required
                                 />
-                        </div>
 
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="summary">
-                                        Summary
-                                </label>
-                                <input
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="summary"
-                                        type="text"
-                                        name="summary"
+                                <Text style={styles.label}>Summary</Text>
+                                <TextInput
+                                        style={styles.input}
                                         value={formData.summary}
-                                        onChange={handleChange}
+                                        onChangeText={(text) => handleChange("summary", text)}
+                                        placeholder="Summary"
                                 />
-                        </div>
 
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="content">
-                                        Content *
-                                </label>
-                                <textarea
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="content"
-                                        name="content"
+                                <Text style={styles.label}>Content *</Text>
+                                <TextInput
+                                        style={[styles.input, styles.textArea]}
                                         value={formData.content}
-                                        onChange={handleChange}
-                                        rows="6"
-                                        required
-                                ></textarea>
-                        </div>
-
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="riskLevel">
-                                        Risk Level
-                                </label>
-                                <select
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="riskLevel"
-                                        name="riskLevel"
-                                        value={formData.riskLevel}
-                                        onChange={handleChange}
-                                >
-                                        <option value="low">Low</option>
-                                        <option value="medium">Medium</option>
-                                        <option value="high">High</option>
-                                        <option value="critical">Critical</option>
-                                </select>
-                        </div>
-
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="category">
-                                        Category *
-                                </label>
-                                <input
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="category"
-                                        type="text"
-                                        name="category"
-                                        value={formData.category}
-                                        onChange={handleChange}
+                                        onChangeText={(text) => handleChange("content", text)}
+                                        placeholder="Content"
+                                        multiline
+                                        numberOfLines={6}
                                         required
                                 />
-                        </div>
 
-                        <div className="mb-4">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="tags">
-                                        Tags (comma separated)
-                                </label>
-                                <input
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="tags"
-                                        type="text"
-                                        name="tags"
+                                <Text style={styles.label}>Risk Level</Text>
+                                <View style={styles.riskSelector}>
+                                        <TouchableOpacity
+                                                style={[
+                                                        styles.riskOption,
+                                                        styles.riskOptionLow,
+                                                        formData.riskLevel === "low" && styles.riskOptionLowSelected,
+                                                ]}
+                                                onPress={() => handleChange("riskLevel", "low")}
+                                        >
+                                                <Text style={[styles.riskOptionText, formData.riskLevel === "low" && { color: COLORS.white }]}>Low</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                                style={[
+                                                        styles.riskOption,
+                                                        styles.riskOptionMedium,
+                                                        formData.riskLevel === "medium" && styles.riskOptionMediumSelected,
+                                                ]}
+                                                onPress={() => handleChange("riskLevel", "medium")}
+                                        >
+                                                <Text style={[styles.riskOptionText, formData.riskLevel === "medium" && { color: COLORS.white }]}>
+                                                        Medium
+                                                </Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                                style={[
+                                                        styles.riskOption,
+                                                        styles.riskOptionHigh,
+                                                        formData.riskLevel === "high" && styles.riskOptionHighSelected,
+                                                ]}
+                                                onPress={() => handleChange("riskLevel", "high")}
+                                        >
+                                                <Text style={[styles.riskOptionText, formData.riskLevel === "high" && { color: COLORS.white }]}>High</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                                style={[
+                                                        styles.riskOption,
+                                                        styles.riskOptionCritical,
+                                                        formData.riskLevel === "critical" && styles.riskOptionCriticalSelected,
+                                                ]}
+                                                onPress={() => handleChange("riskLevel", "critical")}
+                                        >
+                                                <Text style={[styles.riskOptionText, formData.riskLevel === "critical" && { color: COLORS.white }]}>
+                                                        Critical
+                                                </Text>
+                                        </TouchableOpacity>
+                                </View>
+
+                                <Text style={styles.label}>Category *</Text>
+                                <TextInput
+                                        style={styles.input}
+                                        value={formData.category}
+                                        onChangeText={(text) => handleChange("category", text)}
+                                        placeholder="Category"
+                                        required
+                                />
+
+                                <Text style={styles.label}>Tags (comma separated)</Text>
+                                <TextInput
+                                        style={styles.input}
                                         value={formData.tags}
-                                        onChange={handleChange}
+                                        onChangeText={(text) => handleChange("tags", text)}
                                         placeholder="e.g. diabetes, heart, prevention"
                                 />
-                        </div>
 
-                        <div className="mb-6">
-                                <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="imageUrl">
-                                        Image URL
-                                </label>
-                                <input
-                                        className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                        id="imageUrl"
-                                        type="url"
-                                        name="imageUrl"
+                                <Text style={styles.label}>Image URL</Text>
+                                <TextInput
+                                        style={styles.input}
                                         value={formData.imageUrl}
-                                        onChange={handleChange}
+                                        onChangeText={(text) => handleChange("imageUrl", text)}
                                         placeholder="https://example.com/image.jpg"
                                 />
-                        </div>
 
-                        <div className="flex items-center justify-between">
-                                <button
-                                        type="button"
-                                        onClick={() => setShowForm(false)}
-                                        className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                                >
-                                        Cancel
-                                </button>
-                                <button
-                                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                                        type="submit"
-                                        disabled={isSubmitting}
-                                >
-                                        {isSubmitting ? 'Submitting...' : 'Submit Article'}
-                                </button>
-                        </div>
-                </form>
-        );
+                                <View style={styles.formButtonsContainer}>
+                                        <TouchableOpacity style={styles.cancelButton} onPress={() => setShowForm(false)}>
+                                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                                style={[styles.submitButton, isSubmitting && { opacity: 0.7 }]}
+                                                onPress={handleSubmit}
+                                                disabled={isSubmitting}
+                                        >
+                                                <Text style={styles.submitButtonText}>{isSubmitting ? "Submitting..." : "Submit Article"}</Text>
+                                        </TouchableOpacity>
+                                </View>
+
+                                {/* Extra space at the bottom to ensure form is fully visible */}
+                                <View style={styles.formBottomSpacer} />
+                        </ScrollView>
+                </KeyboardAvoidingView>
+        )
 
         // Render an article card
         const renderArticleCard = (article) => (
-                <div
-                        key={article.id}
-                        className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow duration-300 cursor-pointer"
-                        onClick={() => viewArticle(article)}
-                >
-                        {article.imageUrl && (
-                                <div className="h-48 overflow-hidden">
-                                        <img
-                                                src={article.imageUrl}
-                                                alt={article.title}
-                                                className="w-full h-full object-cover"
+                <TouchableOpacity key={article.id} style={styles.card} onPress={() => viewArticle(article)}>
+                        <View style={styles.cardImageContainer}>
+                                {article.imageUrl && (
+                                        <Image
+                                                source={{ uri: article.imageUrl }}
+                                                style={styles.cardImage}
                                                 onError={(e) => {
-                                                        e.target.onerror = null;
-                                                        e.target.src = '/default-health-article.jpg';
+                                                        e.target.onerror = null
+                                                        e.target.src = "https://via.placeholder.com/150"
                                                 }}
                                         />
-                                </div>
-                        )}
+                                )}
+                        </View>
 
-                        <div className="p-5">
-                                <div className="flex justify-between items-start mb-2">
-                                        <h3 className="text-xl font-semibold text-gray-900 mb-1">{article.title}</h3>
+                        <View style={styles.cardContent}>
+                                <View style={styles.cardHeader}>
+                                        <Text style={styles.cardTitle}>{article.title}</Text>
                                         {article.riskLevel && (
-                                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskLevelColor(article.riskLevel)}`}>
-                                                        {article.riskLevel.charAt(0).toUpperCase() + article.riskLevel.slice(1)} Risk
-                                                </span>
+                                                <View style={[styles.riskLevel, getRiskLevelColor(article.riskLevel)]}>
+                                                        <Text style={[styles.riskText, getRiskLevelColor(article.riskLevel + "Text")]}>
+                                                                {article.riskLevel.charAt(0).toUpperCase() + article.riskLevel.slice(1)} Risk
+                                                        </Text>
+                                                </View>
                                         )}
-                                </div>
+                                </View>
 
-                                <p className="text-gray-600 text-sm mb-3">
-                                        {formatDate(article.createdAt)}
-                                </p>
+                                <Text style={styles.cardDate}>{formatDate(article.createdAt)}</Text>
 
-                                {article.summary && (
-                                        <p className="text-gray-700 mb-3">{truncateText(article.summary)}</p>
-                                )}
+                                {article.summary && <Text style={styles.cardSummary}>{truncateText(article.summary)}</Text>}
 
-                                {!article.summary && article.content && (
-                                        <p className="text-gray-700 mb-3">{truncateText(article.content)}</p>
-                                )}
+                                {!article.summary && article.content && <Text style={styles.cardSummary}>{truncateText(article.content)}</Text>}
 
-                                {article.category && (
-                                        <div className="mb-3">
-                                                <span className="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">
-                                                        {article.category}
-                                                </span>
-                                        </div>
-                                )}
+                                <View style={styles.metadataContainer}>
+                                        {article.category && (
+                                                <View style={styles.categoryContainer}>
+                                                        <Text style={styles.category}>{article.category}</Text>
+                                                </View>
+                                        )}
 
-                                {article.tags && article.tags.length > 0 && (
-                                        <div className="flex flex-wrap gap-1 mt-3">
-                                                {article.tags.map((tag, index) => (
-                                                        <span key={index} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
+                                        {article.tags &&
+                                                article.tags.length > 0 &&
+                                                article.tags.map((tag, index) => (
+                                                        <Text key={index} style={styles.tag}>
                                                                 #{tag}
-                                                        </span>
+                                                        </Text>
                                                 ))}
-                                        </div>
-                                )}
+                                </View>
 
-                                <div className="mt-4 text-blue-600 hover:text-blue-800 font-medium text-sm inline-flex items-center">
-                                        Read more
-                                        <svg className="w-3.5 h-3.5 ml-1" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 14 10">
-                                                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M1 5h12m0 0L9 1m4 4L9 9" />
-                                        </svg>
-                                </div>
-                        </div>
-                </div>
-        );
+                                <View style={styles.readMoreContainer}>
+                                        <Text style={styles.readMore}>Read more</Text>
+                                </View>
+                        </View>
+                </TouchableOpacity>
+        )
 
         // Render article detail view
         const renderArticleDetail = () => (
-                <div>
-                        <button
-                                onClick={backToList}
-                                className="flex items-center text-blue-600 hover:text-blue-800 mb-6"
-                        >
-                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-                                </svg>
-                                Back to Articles
-                        </button>
+                <SafeAreaView style={styles.safeArea}>
+                        <ScrollView style={styles.detailContainer} contentContainerStyle={styles.detailContentScrollContainer}>
+                                <TouchableOpacity onPress={backToList} style={styles.backButton}>
+                                        <Text style={styles.backButtonText}>← Back to Articles</Text>
+                                </TouchableOpacity>
 
-                        <article className="bg-white rounded-lg shadow-md overflow-hidden">
-                                {selectedArticle.imageUrl && (
-                                        <div className="h-64 md:h-80 overflow-hidden">
-                                                <img
-                                                        src={selectedArticle.imageUrl}
-                                                        alt={selectedArticle.title}
-                                                        className="w-full h-full object-cover"
+                                <View style={styles.detailContent}>
+                                        {selectedArticle.imageUrl && (
+                                                <Image
+                                                        source={{ uri: selectedArticle.imageUrl }}
+                                                        style={styles.detailImage}
                                                         onError={(e) => {
-                                                                e.target.onerror = null;
-                                                                e.target.src = '/default-health-article.jpg';
+                                                                e.target.onerror = null
+                                                                e.target.src = "https://via.placeholder.com/150"
                                                         }}
                                                 />
-                                        </div>
-                                )}
-
-                                <div className="p-6">
-                                        <div className="flex flex-wrap justify-between items-start gap-2 mb-4">
-                                                <h1 className="text-3xl font-bold text-gray-900">{selectedArticle.title}</h1>
-                                                {selectedArticle.riskLevel && (
-                                                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getRiskLevelColor(selectedArticle.riskLevel)}`}>
-                                                                {selectedArticle.riskLevel.charAt(0).toUpperCase() + selectedArticle.riskLevel.slice(1)} Risk
-                                                        </span>
-                                                )}
-                                        </div>
-
-                                        <div className="flex items-center text-gray-600 text-sm mb-6">
-                                                <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                                </svg>
-                                                <time>{formatDate(selectedArticle.createdAt)}</time>
-                                        </div>
-
-                                        {selectedArticle.summary && (
-                                                <div className="mb-6">
-                                                        <h2 className="text-xl font-semibold text-gray-800 mb-2">Summary</h2>
-                                                        <p className="text-gray-700 italic">{selectedArticle.summary}</p>
-                                                </div>
                                         )}
 
-                                        <div className="mb-6">
-                                                {selectedArticle.content.split('\n').map((paragraph, index) => (
-                                                        <p key={index} className="text-gray-700 mb-4">{paragraph}</p>
+                                        <View style={styles.detailHeader}>
+                                                <Text style={styles.detailTitle}>{selectedArticle.title}</Text>
+                                                {selectedArticle.riskLevel && (
+                                                        <View style={[styles.detailRiskLevel, getRiskLevelColor(selectedArticle.riskLevel)]}>
+                                                                <Text style={[styles.riskText, getRiskLevelColor(selectedArticle.riskLevel + "Text")]}>
+                                                                        {selectedArticle.riskLevel.charAt(0).toUpperCase() + selectedArticle.riskLevel.slice(1)} Risk
+                                                                </Text>
+                                                        </View>
+                                                )}
+                                        </View>
+
+                                        <Text style={styles.detailDate}>{formatDate(selectedArticle.createdAt)}</Text>
+
+                                        {selectedArticle.summary && (
+                                                <View style={styles.detailSummaryContainer}>
+                                                        <Text style={styles.detailSummaryTitle}>Summary</Text>
+                                                        <Text style={styles.detailSummary}>{selectedArticle.summary}</Text>
+                                                </View>
+                                        )}
+
+                                        <View style={styles.detailContentContainer}>
+                                                {selectedArticle.content.split("\n").map((paragraph, index) => (
+                                                        <Text key={index} style={styles.detailContentParagraph}>
+                                                                {paragraph}
+                                                        </Text>
                                                 ))}
-                                        </div>
+                                        </View>
 
-                                        <div className="flex flex-wrap gap-2 mb-6">
-                                                {selectedArticle.category && (
-                                                        <span className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1 rounded">
-                                                                {selectedArticle.category}
-                                                        </span>
-                                                )}
+                                        <View style={styles.detailTagsSection}>
+                                                <Text style={styles.detailTagsTitle}>Tags & Categories</Text>
+                                                <View style={styles.metadataContainer}>
+                                                        {selectedArticle.category && (
+                                                                <View style={styles.categoryContainer}>
+                                                                        <Text style={styles.category}>{selectedArticle.category}</Text>
+                                                                </View>
+                                                        )}
 
-                                                {selectedArticle.tags && selectedArticle.tags.length > 0 && (
-                                                        selectedArticle.tags.map((tag, index) => (
-                                                                <span key={index} className="bg-gray-100 text-gray-800 text-sm px-3 py-1 rounded">
-                                                                        #{tag}
-                                                                </span>
-                                                        ))
-                                                )}
-                                        </div>
-                                </div>
-                        </article>
-                </div>
-        );
+                                                        {selectedArticle.tags &&
+                                                                selectedArticle.tags.length > 0 &&
+                                                                selectedArticle.tags.map((tag, index) => (
+                                                                        <Text key={index} style={styles.tag}>
+                                                                                #{tag}
+                                                                        </Text>
+                                                                ))}
+                                                </View>
+                                        </View>
+                                </View>
+
+                                {/* Extra space at the bottom */}
+                                <View style={styles.bottomSpacer} />
+                        </ScrollView>
+                </SafeAreaView>
+        )
 
         // Render the article list
         const renderArticleList = () => (
-                <div>
-                        <div className="flex justify-between items-center mb-8">
-                                <h1 className="text-3xl font-bold text-gray-800">Health Risk Screening</h1>
-                                <button
-                                        onClick={() => setShowForm(!showForm)}
-                                        className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded"
-                                >
-                                        {showForm ? 'Cancel' : 'Add New Article'}
-                                </button>
-                        </div>
+                <SafeAreaView style={styles.safeArea}>
+                        <View style={styles.listContainer}>
+                                <View style={styles.header}>
+                                        <Text style={styles.headerTitle}>Articles</Text>
+                                        <TouchableOpacity
+                                                style={styles.headerButton}
+                                                onPress={() => {
+                                                        setShowForm(!showForm)
+                                                        console.log("Toggle form visibility:", !showForm) // Add logging to debug
+                                                }}
+                                        >
+                                                <Text style={styles.headerButtonText}>{showForm ? "Cancel" : "Add New Article"}</Text>
+                                        </TouchableOpacity>
+                                </View>
 
-                        {error && (
-                                <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-                                        {error}
-                                </div>
-                        )}
+                                {error && (
+                                        <View style={styles.errorContainer}>
+                                                <Text style={styles.errorText}>{error}</Text>
+                                        </View>
+                                )}
 
-                        {showForm && (
-                                <div className="mb-8">
-                                        {renderArticleForm()}
-                                </div>
-                        )}
-
-                        {loading && !showForm ? (
-                                <div className="flex justify-center py-8">
-                                        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-                                </div>
-                        ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                        {articles.length > 0 ? (
-                                                articles.map(article => renderArticleCard(article))
-                                        ) : (
-                                                <div className="col-span-full text-center py-12 text-gray-500">
-                                                        No health risk articles found. Be the first to add one!
-                                                </div>
-                                        )}
-                                </div>
-                        )}
-                </div>
-        );
+                                {showForm ? (
+                                        renderArticleForm()
+                                ) : loading ? (
+                                        <View style={styles.loadingContainer}>
+                                                <ActivityIndicator size="large" color={COLORS.primary} />
+                                        </View>
+                                ) : (
+                                        <ScrollView contentContainerStyle={styles.articleListContent} showsVerticalScrollIndicator={true}>
+                                                {articles.length > 0 ? (
+                                                        articles.map((article) => renderArticleCard(article))
+                                                ) : (
+                                                        <View style={styles.noArticlesContainer}>
+                                                                <Text style={styles.noArticlesText}>No health risk articles found. Be the first to add one!</Text>
+                                                        </View>
+                                                )}
+                                                <View style={styles.bottomSpacer} />
+                                        </ScrollView>
+                                )}
+                        </View>
+                </SafeAreaView>
+        )
 
         // Main render logic
-        return (
-                <div className="container mx-auto px-4 py-8">
-                        {selectedArticle ? renderArticleDetail() : renderArticleList()}
-                </div>
-        );
-};
+        return <View style={styles.container}>{selectedArticle ? renderArticleDetail() : renderArticleList()}</View>
+}
 
-export default HealthRiskScreen;
+const COLORS = {
+        primary: "#2563EB", // Vibrant blue
+        primaryLight: "#DBEAFE",
+        secondary: "#7C3AED", // Purple for accents
+        background: "#F9FAFB",
+        white: "#FFFFFF",
+        dark: "#111827",
+        gray: "#6B7280",
+        lightGray: "#E5E7EB",
+        success: "#10B981", // Low risk
+        warning: "#FBBF24", // Medium risk
+        alert: "#F59E0B", // High risk
+        danger: "#EF4444", // Critical risk
+        info: "#3B82F6",
+}
+
+const SHADOWS = {
+        small: {
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 1 },
+                shadowOpacity: 0.2,
+                shadowRadius: 2,
+                elevation: 2,
+        },
+        medium: {
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 3 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                elevation: 4,
+        },
+        large: {
+                shadowColor: "#000",
+                shadowOffset: { width: 0, height: 6 },
+                shadowOpacity: 0.4,
+                shadowRadius: 8,
+                elevation: 8,
+        },
+}
+
+const FONTS = {
+        heading: {
+                fontWeight: "bold",
+                letterSpacing: 0.5,
+        },
+        subheading: {
+                fontWeight: "600",
+                letterSpacing: 0.3,
+        },
+        body: {
+                fontSize: 16,
+                lineHeight: 24,
+        },
+        caption: {
+                fontSize: 14,
+                color: COLORS.gray,
+        },
+}
+
+const BOTTOM_NAV_HEIGHT = 80 // Adjust based on your app's bottom navigation height
+
+const styles = StyleSheet.create({
+        // Container styles
+        container: {
+                flex: 1,
+                backgroundColor: COLORS.background,
+        },
+        safeArea: {
+                flex: 1,
+        },
+        keyboardAvoidingView: {
+                flex: 1,
+        },
+
+        // Header styles
+        header: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                paddingHorizontal: 20,
+                paddingVertical: 16,
+                backgroundColor: COLORS.white,
+                ...SHADOWS.medium,
+                marginHorizontal: 16,
+                marginVertical: 12,
+                borderRadius: 12,
+        },
+        headerTitle: {
+                ...FONTS.heading,
+                fontSize: 24,
+                color: COLORS.dark,
+        },
+        headerButton: {
+                backgroundColor: COLORS.primary,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                borderRadius: 8,
+                flexDirection: "row",
+                alignItems: "center",
+        },
+        headerButtonText: {
+                color: COLORS.white,
+                fontWeight: "600",
+        },
+
+        // List container
+        listContainer: {
+                flex: 1,
+                paddingTop: 8,
+        },
+        articleListContent: {
+                paddingHorizontal: 16,
+                paddingBottom: BOTTOM_NAV_HEIGHT + 20, // Extra padding at bottom
+        },
+
+        // Card styles
+        card: {
+                backgroundColor: COLORS.white,
+                borderRadius: 16,
+                overflow: "hidden",
+                ...SHADOWS.small,
+                marginBottom: 16,
+                borderWidth: 1,
+                borderColor: COLORS.lightGray,
+        },
+        cardImageContainer: {
+                height: 180,
+                width: "100%",
+                backgroundColor: COLORS.lightGray,
+        },
+        cardImage: {
+                width: "100%",
+                height: "100%",
+                resizeMode: "cover",
+        },
+        cardContent: {
+                padding: 16,
+        },
+        cardHeader: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: 12,
+        },
+        cardTitle: {
+                ...FONTS.subheading,
+                fontSize: 18,
+                color: COLORS.dark,
+                flex: 1,
+                marginRight: 12,
+        },
+        cardDate: {
+                ...FONTS.caption,
+                fontSize: 14,
+                color: COLORS.gray,
+                marginBottom: 8,
+        },
+        cardSummary: {
+                ...FONTS.body,
+                fontSize: 15,
+                color: COLORS.gray,
+                marginBottom: 12,
+                lineHeight: 22,
+        },
+
+        // Risk badges
+        riskLevel: {
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+                justifyContent: "center",
+                alignItems: "center",
+                alignSelf: "flex-start",
+        },
+        riskText: {
+                fontWeight: "600",
+                fontSize: 14,
+        },
+        lowRisk: {
+                backgroundColor: "rgba(16, 185, 129, 0.1)",
+        },
+        lowRiskText: {
+                color: COLORS.success,
+        },
+        mediumRisk: {
+                backgroundColor: "rgba(251, 191, 36, 0.1)",
+        },
+        mediumRiskText: {
+                color: COLORS.warning,
+        },
+        highRisk: {
+                backgroundColor: "rgba(245, 158, 11, 0.1)",
+        },
+        highRiskText: {
+                color: COLORS.alert,
+        },
+        criticalRisk: {
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+        },
+        criticalRiskText: {
+                color: COLORS.danger,
+        },
+        defaultRisk: {
+                backgroundColor: "rgba(107, 114, 128, 0.1)",
+        },
+        defaultRiskText: {
+                color: COLORS.gray,
+        },
+
+        // Tags and categories
+        metadataContainer: {
+                flexDirection: "row",
+                flexWrap: "wrap",
+                marginTop: 8,
+        },
+        categoryContainer: {
+                backgroundColor: COLORS.primaryLight,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+                marginRight: 8,
+                marginBottom: 8,
+        },
+        category: {
+                ...FONTS.caption,
+                color: COLORS.primary,
+                fontWeight: "600",
+        },
+        tag: {
+                ...FONTS.caption,
+                color: COLORS.gray,
+                borderColor: COLORS.lightGray,
+                borderWidth: 1,
+                borderRadius: 20,
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                marginRight: 8,
+                marginBottom: 8,
+        },
+
+        // Read more button
+        readMoreContainer: {
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                marginTop: 12,
+        },
+        readMore: {
+                ...FONTS.subheading,
+                fontSize: 14,
+                color: COLORS.primary,
+        },
+
+        // Detail view styles
+        detailContainer: {
+                flex: 1,
+                backgroundColor: COLORS.white,
+        },
+        detailContentScrollContainer: {
+                paddingBottom: BOTTOM_NAV_HEIGHT + 20,
+        },
+        detailImage: {
+                width: "100%",
+                height: 240,
+                resizeMode: "cover",
+                marginBottom: 16,
+        },
+        backButton: {
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                marginBottom: 8,
+        },
+        backButtonText: {
+                ...FONTS.subheading,
+                color: COLORS.primary,
+                fontSize: 16,
+        },
+        detailContent: {
+                paddingHorizontal: 16,
+        },
+        detailHeader: {
+                marginBottom: 8,
+        },
+        detailTitle: {
+                ...FONTS.heading,
+                fontSize: 24,
+                color: COLORS.dark,
+                marginBottom: 12,
+        },
+        detailDate: {
+                ...FONTS.caption,
+                marginBottom: 16,
+        },
+        detailRiskLevel: {
+                paddingHorizontal: 12,
+                paddingVertical: 6,
+                borderRadius: 20,
+                alignSelf: "flex-start",
+                marginBottom: 12,
+        },
+        detailSummaryContainer: {
+                backgroundColor: COLORS.primaryLight,
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 24,
+        },
+        detailSummaryTitle: {
+                ...FONTS.subheading,
+                color: COLORS.primary,
+                marginBottom: 8,
+        },
+        detailSummary: {
+                ...FONTS.body,
+                color: COLORS.dark,
+                fontStyle: "italic",
+        },
+        detailContentContainer: {
+                marginBottom: 24,
+        },
+        detailContentParagraph: {
+                ...FONTS.body,
+                color: COLORS.dark,
+                marginBottom: 16,
+                lineHeight: 24,
+        },
+        detailTagsSection: {
+                marginTop: 16,
+                marginBottom: 24,
+        },
+        detailTagsTitle: {
+                ...FONTS.subheading,
+                fontSize: 16,
+                color: COLORS.dark,
+                marginBottom: 12,
+        },
+
+        // Form styles
+        formContainer: {
+                backgroundColor: COLORS.white,
+                borderRadius: 16,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                ...SHADOWS.medium,
+                zIndex: 1, // Add zIndex to ensure it appears on top
+        },
+        formContentContainer: {
+                padding: 20,
+                paddingBottom: BOTTOM_NAV_HEIGHT + 40, // Extra padding at bottom
+        },
+        formTitle: {
+                ...FONTS.heading,
+                fontSize: 22,
+                color: COLORS.dark,
+                marginBottom: 20,
+        },
+        label: {
+                ...FONTS.subheading,
+                color: COLORS.dark,
+                marginBottom: 8,
+        },
+        input: {
+                borderWidth: 1,
+                borderColor: COLORS.lightGray,
+                borderRadius: 8,
+                padding: 12,
+                fontSize: 16,
+                color: COLORS.dark,
+                backgroundColor: COLORS.white,
+                marginBottom: 16,
+        },
+        textArea: {
+                minHeight: 120,
+                textAlignVertical: "top",
+        },
+
+        // Risk level selector
+        riskSelector: {
+                flexDirection: "row",
+                marginBottom: 20,
+        },
+        riskOption: {
+                flex: 1,
+                paddingVertical: 10,
+                marginHorizontal: 4,
+                borderRadius: 8,
+                alignItems: "center",
+                justifyContent: "center",
+                borderWidth: 2,
+        },
+        riskOptionText: {
+                fontWeight: "600",
+                fontSize: 14,
+        },
+        riskOptionLow: {
+                borderColor: COLORS.success,
+        },
+        riskOptionLowSelected: {
+                backgroundColor: COLORS.success,
+        },
+        riskOptionMedium: {
+                borderColor: COLORS.warning,
+        },
+        riskOptionMediumSelected: {
+                backgroundColor: COLORS.warning,
+        },
+        riskOptionHigh: {
+                borderColor: COLORS.alert,
+        },
+        riskOptionHighSelected: {
+                backgroundColor: COLORS.alert,
+        },
+        riskOptionCritical: {
+                borderColor: COLORS.danger,
+        },
+        riskOptionCriticalSelected: {
+                backgroundColor: COLORS.danger,
+        },
+
+        // Form buttons
+        formButtonsContainer: {
+                flexDirection: "row",
+                justifyContent: "space-between",
+                marginTop: 20,
+        },
+        cancelButton: {
+                flex: 1,
+                padding: 14,
+                borderRadius: 8,
+                backgroundColor: COLORS.lightGray,
+                alignItems: "center",
+                marginRight: 8,
+        },
+        cancelButtonText: {
+                color: COLORS.gray,
+                fontWeight: "600",
+        },
+        submitButton: {
+                flex: 2,
+                padding: 14,
+                borderRadius: 8,
+                backgroundColor: COLORS.primary,
+                alignItems: "center",
+                marginLeft: 8,
+        },
+        submitButtonText: {
+                color: COLORS.white,
+                fontWeight: "600",
+        },
+
+        // Loading and error states
+        loadingContainer: {
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+                padding: 16,
+        },
+        errorContainer: {
+                backgroundColor: "rgba(239, 68, 68, 0.1)",
+                padding: 16,
+                borderRadius: 8,
+                marginHorizontal: 16,
+                marginBottom: 16,
+                borderLeftWidth: 4,
+                borderLeftColor: COLORS.danger,
+        },
+        errorText: {
+                ...FONTS.body,
+                color: COLORS.danger,
+        },
+        noArticlesContainer: {
+                padding: 24,
+                alignItems: "center",
+                justifyContent: "center",
+        },
+        noArticlesText: {
+                ...FONTS.body,
+                color: COLORS.gray,
+                textAlign: "center",
+                marginTop: 8,
+        },
+
+        // Bottom spacers to prevent content from being hidden
+        bottomSpacer: {
+                height: BOTTOM_NAV_HEIGHT + 20,
+        },
+        formBottomSpacer: {
+                height: BOTTOM_NAV_HEIGHT + 40,
+        },
+})
+
+export default HealthRiskScreen
+

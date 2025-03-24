@@ -1,0 +1,60 @@
+{
+        "healthRiskArticles": {
+                "article1": {
+                        "title": "Understanding Diabetes",
+                        "summary": "A comprehensive guide to understanding diabetes, its types, and management.",
+                        "content": "Diabetes is a chronic condition that affects how your body turns food into energy...",
+                        "riskLevel": "medium",
+                        "category": "Chronic Diseases",
+                        "tags": [
+                                "diabetes",
+                                "health",
+                                "chronic"
+                        ],
+                        "imageUrl": "https://source.unsplash.com/600x400/?diabetes,health",
+                        "createdAt": "2023-10-01T12:00:00Z"
+                },
+                "article2": {
+                        "title": "Heart Disease Prevention",
+                        "summary": "Learn about the risk factors and prevention strategies for heart disease.",
+                        "content": "Heart disease is the leading cause of death globally...",
+                        "riskLevel": "high",
+                        "category": "Cardiovascular Health",
+                        "tags": [
+                                "heart",
+                                "prevention",
+                                "cardiovascular"
+                        ],
+                        "imageUrl": "https://source.unsplash.com/600x400/?heart,health",
+                        "createdAt": "2023-10-02T14:30:00Z"
+                },
+                "article3": {
+                        "title": "Managing Stress for Better Health",
+                        "summary": "Explore effective ways to manage stress and improve your overall health.",
+                        "content": "Stress is a natural response to challenges, but chronic stress can harm your health...",
+                        "riskLevel": "low",
+                        "category": "Mental Health",
+                        "tags": [
+                                "stress",
+                                "mental health",
+                                "wellness"
+                        ],
+                        "imageUrl": "https://source.unsplash.com/600x400/?stress,mental-health",
+                        "createdAt": "2023-10-03T09:15:00Z"
+                },
+                "article4": {
+                        "title": "The Dangers of Smoking",
+                        "summary": "Understand the severe health risks associated with smoking.",
+                        "content": "Smoking is one of the leading causes of preventable deaths worldwide...",
+                        "riskLevel": "critical",
+                        "category": "Lung Health",
+                        "tags": [
+                                "smoking",
+                                "lung health",
+                                "prevention"
+                        ],
+                        "imageUrl": "https://source.unsplash.com/600x400/?smoking,lung",
+                        "createdAt": "2023-10-04T16:45:00Z"
+                }
+        }
+}
