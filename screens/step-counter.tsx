@@ -3,11 +3,10 @@ import { Accelerometer } from 'expo-sensors';
 import { SafeAreaView, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { format, subDays } from 'date-fns';
 import { ref, set, onValue, get } from 'firebase/database';
-import { db } from '../config/firebase'; // Make sure this path is correct
-
-// Import a React Native compatible chart library
+import { db } from '../config/firebase';
 import { LineChart } from 'react-native-chart-kit';
 import { Dimensions } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
 export default function StepsCounter() {
         const [steps, setSteps] = useState(0);
@@ -16,32 +15,30 @@ export default function StepsCounter() {
         const [lastTimestamp, setLastTimestamp] = useState(0);
         const [chartData, setChartData] = useState([]);
         const [todayGoal, setTodayGoal] = useState(10000);
-        const [selectedPeriod, setSelectedPeriod] = useState('week'); // 'week' or 'month'
-
+        const [selectedPeriod, setSelectedPeriod] = useState('week');
         const today = format(new Date(), 'yyyy-MM-dd');
-        const screenWidth = Dimensions.get('window').width - 40; // Account for padding
+        const screenWidth = Dimensions.get('window').width - 40;
 
-        // Initialize steps from Firebase and setup listener
+        const { user } = useAuth();
+
+        const userId = user.uid;
+
         useEffect(() => {
-                // Get today's steps from Firebase
-                const todayStepsRef = ref(db, `steps/${today}`);
+                const todayStepsRef = ref(db, `steps/${userId}/${today}`);
                 get(todayStepsRef).then((snapshot) => {
                         if (snapshot.exists()) {
                                 setSteps(snapshot.val().count);
                         } else {
-                                // Create today's entry if it doesn't exist
                                 set(todayStepsRef, { count: 0 });
                         }
                 });
 
-                // Set up listener for steps updates
                 const unsubscribe = onValue(todayStepsRef, (snapshot) => {
                         if (snapshot.exists()) {
                                 setSteps(snapshot.val().count);
                         }
                 });
 
-                // Fetch historical data for chart
                 fetchChartData();
 
                 return () => {
@@ -49,9 +46,8 @@ export default function StepsCounter() {
                 };
         }, []);
 
-        // Update Firebase when steps change
         useEffect(() => {
-                const todayStepsRef = ref(db, `steps/${today}`);
+                const todayStepsRef = ref(db, `steps/${userId}/${today}`);
                 set(todayStepsRef, { count: steps });
         }, [steps]);
 
@@ -71,7 +67,7 @@ export default function StepsCounter() {
                         const dateLabel = format(subDays(new Date(), i), 'MMM dd');
 
                         try {
-                                const stepsRef = ref(db, `steps/${date}`);
+                                const stepsRef = ref(db, `steps/${userId}/${date}`);
                                 const snapshot = await get(stepsRef);
                                 const count = snapshot.exists() ? snapshot.val().count : 0;
 
@@ -146,7 +142,7 @@ export default function StepsCounter() {
         const resetSteps = () => {
                 setSteps(0);
                 // Update Firebase with reset
-                const todayStepsRef = ref(db, `steps/${today}`);
+                const todayStepsRef = ref(db, `steps/${userId}/${today}`);
                 set(todayStepsRef, { count: 0 });
         };
 
