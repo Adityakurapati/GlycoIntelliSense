@@ -15,6 +15,7 @@ import {
         cancelUserAppointment,
         fetchLabUsers
 } from "../config/appointService"
+import { useAuth } from "../context/AuthContext"
 
 export default function AppointmentsScreen() {
         const [appointments, setAppointments] = useState<Appointment[]>([])
@@ -58,56 +59,68 @@ export default function AppointmentsScreen() {
         }, [])
 
         const bookAppointment = async () => {
+                console.log("Book Appointment function triggered");
+
                 if (!selectedLab || !selectedTest || !selectedDate || !selectedTime) {
-                        Alert.alert("Missing Information", "Please fill in all required fields")
-                        return
+                        Alert.alert("Missing Information", "Please fill in all required fields");
+                        return;
                 }
 
                 if (homeCollection && !address) {
-                        Alert.alert("Missing Address", "Please provide an address for home collection")
-                        return
+                        Alert.alert("Missing Address", "Please provide an address for home collection");
+                        return;
                 }
 
-                const selectedLabObj = labs.find((lab) => lab.id === selectedLab)
+                console.log("Lab and test selected, proceeding...");
 
+
+                const selectedLabObj = labs.find((lab) => lab.id === selectedLab);
                 if (!selectedLabObj) {
-                        Alert.alert("Error", "Selected lab not found")
-                        return
+
+                        console.log("Reached Here ");
+                        Alert.alert("Error", "Selected lab not found");
+                        return;
                 }
 
-                const [hours, minutes] = selectedTime.split(":").map(Number)
-                const appointmentDate = new Date(selectedDate)
-                appointmentDate.setHours(hours, minutes)
 
-                const newAppointment: Appointment = {
+
+                const [hours, minutes] = selectedTime.split(":").map(Number);
+                const appointmentDate = new Date(selectedDate);
+                appointmentDate.setHours(hours, minutes);
+
+                const newAppointment = {
                         id: Date.now().toString(),
+                        userId: "eQJzIMI711O722398z5ZFg8OPOl2",
                         labId: selectedLab,
                         labName: selectedLabObj.name,
                         testType: selectedTest,
-                        date: appointmentDate,
+                        date: appointmentDate.toISOString(),
                         status: "scheduled",
                         homeCollection,
-                        address: homeCollection ? address : undefined,
-                }
+                        address: homeCollection ? address : "",
+                };
+
+                console.log("New appointment object:", newAppointment);
 
                 try {
-                        setLoading(true)
-                        // Save to Firebase
-                        await bookNewAppointment(newAppointment)
+                        setLoading(true);
+                        await bookNewAppointment(newAppointment, "eQJzIMI711O722398z5ZFg8OPOl2");
+                        console.log("Appointment booked successfully!");
 
-                        // Update local state
-                        setAppointments([...appointments, newAppointment])
-                        resetForm()
-                        setShowBooking(false)
+                        setAppointments([...appointments, newAppointment]);
+                        resetForm();
+                        setShowBooking(false);
 
-                        Alert.alert("Success", "Appointment booked successfully")
+                        Alert.alert("Success", "Appointment booked successfully");
                 } catch (error) {
-                        console.error("Error booking appointment:", error)
-                        Alert.alert("Error", "Failed to book appointment. Please try again.")
+                        console.error("Error booking appointment:", error);
+                        Alert.alert("Error", "Failed to book appointment. Please try again.");
                 } finally {
-                        setLoading(false)
+                        setLoading(false);
                 }
-        }
+        };
+
+
 
         const resetForm = () => {
                 setSelectedLab("")
@@ -508,9 +521,6 @@ export default function AppointmentsScreen() {
                                                                                 <Icon name="user" type="feather" size={20} color="#666" />
                                                                                 <View style={styles.userInfo}>
                                                                                         <Text style={styles.userName}>{user.name}</Text>
-                                                                                        <Text style={styles.userDetails}>
-                                                                                                {user.email} • {user.appointments || 0} appointments
-                                                                                        </Text>
                                                                                 </View>
                                                                         </View>
                                                                 ))

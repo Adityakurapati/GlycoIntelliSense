@@ -65,13 +65,13 @@ export const fetchLabs=async () =>
  * @param {Appointment} appointment - The appointment object to be booked.
  * @returns {Promise<void>}
  */
-export const bookNewAppointment=async ( appointment ) =>
+export const bookNewAppointment=async ( appointment, userId ) =>
 {
         try
         {
                 const appointmentsRef=ref( db, "appointments" );
                 const newAppointmentRef=push( appointmentsRef );
-                await update( newAppointmentRef, appointment );
+                await update( newAppointmentRef, { ...appointment, userId } ); // Include userId in the appointment data
         } catch ( error )
         {
                 console.error( "Error booking appointment:", error );
@@ -98,27 +98,43 @@ export const cancelUserAppointment=async ( id ) =>
 };
 
 /**
- * Fetches all users enrolled in a lab from Realtime Database.
- * @returns {Promise<any[]>} - Array of lab users.
+ * Fetches all users who have booked appointments.
+ * @returns {Promise<any[]>} - Array of users who have appointments.
  */
 export const fetchLabUsers=async () =>
 {
         try
         {
+                const appointmentsRef=ref( db, "appointments" );
                 const usersRef=ref( db, "users" );
-                const q=query( usersRef, orderByChild( "role" ), equalTo( "lab_user" ) );
-                const snapshot=await get( q );
-                if ( snapshot.exists() )
+
+                // Fetch all appointments
+                const snapshot=await get( appointmentsRef );
+                if ( !snapshot.exists() ) return [];
+
+                const userIds=new Set();
+
+                // Extract user IDs from appointments
+                const appointmentsData=snapshot.val();
+                Object.values( appointmentsData ).forEach( ( appointment ) =>
                 {
-                        const users=Object.entries( snapshot.val() ).map( ( [ id, data ] ) => ( {
-                                id,
-                                ...data,
-                        } ) );
-                        return users;
-                } else
+                        if ( appointment.userId )
+                        {
+                                userIds.add( appointment.userId );
+                        }
+                } );
+
+                // Fetch user details for each unique user ID
+                const userPromises=Array.from( userIds ).map( async ( userId ) =>
                 {
-                        return [];
-                }
+                        const userSnapshot=await get( ref( db, `users/${ userId }` ) );
+                        return userSnapshot.exists()? { id: userId, ...userSnapshot.val() }:null;
+                } );
+
+                // Resolve all user data fetch promises
+                const users=await Promise.all( userPromises );
+                return users.filter( user => user!==null );
+
         } catch ( error )
         {
                 console.error( "Error fetching lab users:", error );

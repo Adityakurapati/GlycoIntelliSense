@@ -25,7 +25,7 @@ export type RootStackParamList = {
 export type MainTabParamList = {
         Home: undefined
         BloodSugar: undefined
-        Goals: undefined
+        StepCounter: undefined  // Step Counter moved to Tab
         Appointments: undefined
         More: undefined
 }
@@ -33,7 +33,7 @@ export type MainTabParamList = {
 export type MoreStackParamList = {
         MoreMenu: undefined
         HealthRisk: undefined
-        StepCounter: undefined
+        Goals: undefined  // Goals moved to More
         Medication: undefined
         Progress: undefined
         Nutrition: undefined
@@ -49,7 +49,7 @@ function MoreNavigator() {
                 <MoreStack.Navigator>
                         <MoreStack.Screen name="MoreMenu" component={MoreMenuScreen} options={{ title: "More Options" }} />
                         <MoreStack.Screen name="HealthRisk" component={HealthRiskScreen} options={{ title: "Health Risk Assessment" }} />
-                        <MoreStack.Screen name="StepCounter" component={StepsCounter} options={{ title: "Step Counter" }} />
+                        <MoreStack.Screen name="Goals" component={GoalsScreen} options={{ title: "Goals" }} />
                         <MoreStack.Screen name="Medication" component={MedicationScreen} options={{ title: "Medications & Reminders" }} />
                         <MoreStack.Screen name="Nutrition" component={NutritionScreen} options={{ title: "AI Nutrition Advisor" }} />
                 </MoreStack.Navigator>
@@ -60,9 +60,8 @@ function MoreNavigator() {
 function MoreMenuScreen({ navigation }: any) {
         const menuItems = [
                 { title: "Health Risk Assessment", icon: "alert-circle", screen: "HealthRisk" },
-                { title: "Step Counter", icon: "walk", screen: "StepCounter" },
+                { title: "Goals", icon: "target", screen: "Goals" },
                 { title: "Medications & Reminders", icon: "pill", screen: "Medication" },
-                { title: "Progress Monitoring", icon: "trending-up", screen: "Progress" },
                 { title: "AI Nutrition Advisor", icon: "food", screen: "Nutrition" },
                 { title: "Settings", icon: "settings", screen: "Settings", root: true },
         ]
@@ -106,8 +105,8 @@ function TabNavigator() {
                                                 iconName = "home"
                                         } else if (route.name === "BloodSugar") {
                                                 iconName = "droplet"
-                                        } else if (route.name === "Goals") {
-                                                iconName = "target"
+                                        } else if (route.name === "StepCounter") {
+                                                iconName = "walk"
                                         } else if (route.name === "Appointments") {
                                                 iconName = "calendar"
                                         } else if (route.name === "More") {
@@ -122,7 +121,7 @@ function TabNavigator() {
                 >
                         <Tab.Screen name="Home" component={HomeScreen} options={{ title: "Dashboard" }} />
                         <Tab.Screen name="BloodSugar" component={BloodSugarScreen} options={{ title: "Blood Sugar" }} />
-                        <Tab.Screen name="Goals" component={GoalsScreen} options={{ title: "Goals" }} />
+                        <Tab.Screen name="StepCounter" component={StepsCounter} options={{ title: "Step Counter" }} />
                         <Tab.Screen name="Appointments" component={AppointmentsScreen} options={{ title: "Appointments" }} />
                         <Tab.Screen name="More" component={MoreNavigator} options={{ headerShown: false }} />
                 </Tab.Navigator>
@@ -138,4 +137,3 @@ export default function Navigation() {
                 </Stack.Navigator>
         )
 }
-
